@@ -1,4 +1,5 @@
 import { useDeferredValue, useState } from 'react'
+import { Link } from '@tanstack/react-router'
 import {
   ArrowUpRight,
   ChevronDown,
@@ -251,9 +252,50 @@ export function ProjectsPage() {
             </SelectContent>
           </Select>
         </div>
-        <ProjectTable projects={filtered} />
+        <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-3'>
+          {filtered.map((project) => (
+            <ProjectCard key={project.code} project={project} />
+          ))}
+          <NewProjectDialog
+            trigger={
+              <button className='flex min-h-52 items-center justify-center rounded-md border border-dashed border-border text-sm text-muted-foreground transition hover:bg-muted/40'>
+                + New project
+              </button>
+            }
+          />
+        </div>
       </Panel>
     </>
+  )
+}
+
+// Project card grid — wireframe (decoded design L140-150)
+function ProjectCard({ project }: { project: (typeof projects)[number] }) {
+  return (
+    <Link
+      to='/projects/$code'
+      params={{ code: project.code }}
+      className='block rounded-md border border-border bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md'
+    >
+      <div className='mb-3 flex h-22 items-center justify-center rounded-sm border border-dashed border-border bg-muted/40 text-[11px] text-muted-foreground'>
+        site image
+      </div>
+      <div className='flex items-start justify-between gap-2'>
+        <div className='font-medium text-foreground'>{project.name}</div>
+        <StatusPill tone={statusTone(project.status)}>
+          {project.status}
+        </StatusPill>
+      </div>
+      <div className='my-1 font-mono text-[11px] text-muted-foreground'>
+        {project.code} · {project.owner}
+      </div>
+      <div className='mt-3 flex items-center gap-3'>
+        <Progress value={project.progress} className='h-2 flex-1 bg-muted' />
+        <span className='font-mono text-[11px] text-muted-foreground'>
+          {project.progress}%
+        </span>
+      </div>
+    </Link>
   )
 }
 
@@ -405,13 +447,15 @@ export function HelpCenterPage() {
   )
 }
 
-function NewProjectDialog() {
+function NewProjectDialog({ trigger }: { trigger?: React.ReactNode }) {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button className='rounded-md text-xs'>
-          <Plus className='size-3.5' /> New project
-        </Button>
+        {trigger ?? (
+          <Button className='rounded-md text-xs'>
+            <Plus className='size-3.5' /> New project
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -526,9 +570,13 @@ function ProjectTable({
           {rows.map((project) => (
             <tr key={project.code} className='group hover:bg-muted/40'>
               <td className='py-3'>
-                <div className='font-medium text-foreground'>
+                <Link
+                  to='/projects/$code'
+                  params={{ code: project.code }}
+                  className='font-medium text-foreground hover:underline'
+                >
                   {project.name}
-                </div>
+                </Link>
                 <div className='font-mono text-[11px] text-muted-foreground'>
                   {project.code} · {project.stage}
                 </div>
