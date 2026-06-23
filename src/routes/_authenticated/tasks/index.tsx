@@ -1,6 +1,0 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { ProjectsPage } from '@/features/buildflow/pages'
-
-export const Route = createFileRoute('/_authenticated/tasks/')({
-  component: ProjectsPage,
-})
