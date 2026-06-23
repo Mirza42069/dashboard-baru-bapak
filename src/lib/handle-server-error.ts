@@ -1,4 +1,3 @@
-import { AxiosError } from 'axios'
 import { toast } from 'sonner'
 
 export function handleServerError(error: unknown) {
@@ -16,13 +15,6 @@ export function handleServerError(error: unknown) {
     Number(error.status) === 204
   ) {
     errMsg = 'No content.'
-  }
-
-  if (error instanceof AxiosError) {
-    const title = error.response?.data?.title
-    if (typeof title === 'string' && title.length > 0) {
-      errMsg = title
-    }
   }
 
   toast.error(errMsg)
