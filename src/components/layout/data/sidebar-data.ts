@@ -2,8 +2,6 @@ import {
   LayoutDashboard,
   FolderKanban,
   Users,
-  Building2,
-  CreditCard,
   Settings,
   UserCog,
   Palette,
@@ -35,8 +33,6 @@ export const sidebarData: SidebarData = {
         { title: 'Dashboard', url: '/', icon: LayoutDashboard },
         { title: 'Projects', url: '/projects', icon: FolderKanban },
         { title: 'Team', url: '/team', icon: Users },
-        { title: 'Tenants', url: '/tenants', icon: Building2 },
-        { title: 'Subscriptions', url: '/subscriptions', icon: CreditCard },
       ],
     },
     {

@@ -45,15 +45,12 @@ import {
 import {
   activity,
   attentionItems,
-  invoices,
   milestones,
   portfolioMetrics,
   projects,
   spendSeries,
-  subscriptions,
   systems,
   team,
-  tenants,
 } from './data'
 
 const spendConfig = {
@@ -435,112 +432,6 @@ export function TeamPage() {
   )
 }
 
-export function TenantsPage() {
-  const [query, setQuery] = useState('')
-  const filtered = tenants.filter((tenant) =>
-    `${tenant.organisation} ${tenant.slug} ${tenant.plan}`
-      .toLowerCase()
-      .includes(query.toLowerCase())
-  )
-  return (
-    <>
-      <PageHeader
-        eyebrow='Platform admin'
-        title='Tenants'
-        description='Operator view for customer accounts, usage health, plans, and billing state.'
-        action={<AddTenantDialog />}
-      />
-      <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
-        <MetricCard
-          label='Tenants'
-          value={String(tenants.length)}
-          hint='current total'
-          tone='good'
-        />
-        <MetricCard label='Active users' value='0' hint='last 30 days' />
-        <MetricCard label='Projects' value='0' hint='platform-wide' />
-        <MetricCard label='Uptime' value='0%' hint='30-day avg' tone='good' />
-      </div>
-      <Panel
-        title='All tenants'
-        description='Searchable tenant table'
-        className='mt-4'
-        action={
-          <Button variant='outline' size='sm'>
-            Filter <ChevronDown className='size-3' />
-          </Button>
-        }
-      >
-        <div className='relative mb-4 max-w-md'>
-          <Search className='absolute start-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground' />
-          <Input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            className='rounded-sm border-border bg-background ps-9'
-            placeholder='Search tenants...'
-          />
-        </div>
-        {filtered.length ? (
-          <TenantTable tenants={filtered} />
-        ) : (
-          <EmptyState message='No tenants available.' />
-        )}
-      </Panel>
-    </>
-  )
-}
-
-export function SubscriptionsPage() {
-  return (
-    <>
-      <PageHeader
-        eyebrow='Platform admin'
-        title='Subscriptions'
-        description='Revenue, renewal, invoice, and plan mix for the admin side.'
-      />
-      <div className='grid gap-3 md:grid-cols-3'>
-        <MetricCard
-          label='Monthly recurring'
-          value='£0'
-          hint='current run rate'
-          tone='good'
-        />
-        <MetricCard
-          label='Expansion revenue'
-          value='£0'
-          hint='this quarter'
-          tone='good'
-        />
-        <MetricCard label='Trial conversions' value='0%' hint='last 90 days' />
-      </div>
-      <div className='mt-4 grid gap-4 xl:grid-cols-[1fr_1fr]'>
-        <Panel title='Plan mix' description='Subscription tiers'>
-          {subscriptions.length ? (
-            <div className='space-y-3'>
-              {subscriptions.map((plan) => (
-                <PlanRow key={plan.plan} {...plan} />
-              ))}
-            </div>
-          ) : (
-            <EmptyState message='No subscriptions available.' />
-          )}
-        </Panel>
-        <Panel title='Invoices requiring attention'>
-          {invoices.length ? (
-            <div className='divide-y divide-border'>
-              {invoices.map((invoice) => (
-                <InvoiceRow key={invoice.tenant} {...invoice} />
-              ))}
-            </div>
-          ) : (
-            <EmptyState message='No invoices available.' />
-          )}
-        </Panel>
-      </div>
-    </>
-  )
-}
-
 export function HelpCenterPage() {
   return (
     <EmptyPage
@@ -604,41 +495,6 @@ function InviteDialog() {
             </SelectContent>
           </Select>
           <Button>Send invite</Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function AddTenantDialog() {
-  return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button className='rounded-md text-xs'>
-          <Plus className='size-3.5' /> Add tenant
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add tenant</DialogTitle>
-          <DialogDescription>
-            Enter tenant details to start provisioning.
-          </DialogDescription>
-        </DialogHeader>
-        <div className='grid gap-3 py-2'>
-          <Input placeholder='Organisation name' />
-          <Input placeholder='Workspace slug' />
-          <Select defaultValue='business'>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value='starter'>Starter</SelectItem>
-              <SelectItem value='business'>Business</SelectItem>
-              <SelectItem value='enterprise'>Enterprise</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button>Create tenant</Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -711,75 +567,6 @@ function ProjectTable({
                 <Button variant='ghost' size='icon' className='size-8'>
                   <MoreHorizontal className='size-4' />
                 </Button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-function TenantTable({ tenants: rows }: { tenants: typeof tenants }) {
-  return (
-    <div className='overflow-x-auto'>
-      <table className='w-full min-w-[900px] text-left text-xs'>
-        <thead className='border-b border-border text-[10px] tracking-[0.14em] text-muted-foreground uppercase'>
-          <tr>
-            <th className='py-2 font-medium'>Organisation</th>
-            <th className='py-2 font-medium'>Plan</th>
-            <th className='py-2 font-medium'>Users</th>
-            <th className='py-2 font-medium'>Projects</th>
-            <th className='py-2 font-medium'>Health</th>
-            <th className='py-2 font-medium'>MRR</th>
-            <th className='py-2 font-medium'>Status</th>
-            <th className='py-2 font-medium'>Last active</th>
-          </tr>
-        </thead>
-        <tbody className='divide-y divide-border'>
-          {rows.map((tenant) => (
-            <tr key={tenant.slug} className='hover:bg-muted/40'>
-              <td className='py-3'>
-                <div className='flex items-center gap-3'>
-                  <div className='grid size-9 place-items-center rounded-sm bg-muted text-[11px] font-medium text-muted-foreground'>
-                    {tenant.initials}
-                  </div>
-                  <div>
-                    <div className='font-medium text-foreground'>
-                      {tenant.organisation}
-                    </div>
-                    <div className='font-mono text-[11px] text-muted-foreground'>
-                      {tenant.slug}
-                    </div>
-                  </div>
-                </div>
-              </td>
-              <td className='py-3'>
-                <StatusPill
-                  tone={tenant.plan === 'Enterprise' ? 'good' : 'neutral'}
-                >
-                  {tenant.plan}
-                </StatusPill>
-              </td>
-              <td className='py-3'>{tenant.users}</td>
-              <td className='py-3'>{tenant.projects}</td>
-              <td className='py-3'>
-                <div className='flex items-center gap-2'>
-                  <Progress
-                    value={tenant.health}
-                    className='h-2 w-24 bg-muted'
-                  />
-                  {tenant.health}%
-                </div>
-              </td>
-              <td className='py-3'>{tenant.mrr}</td>
-              <td className='py-3'>
-                <StatusPill tone={tenantTone(tenant.status)}>
-                  {tenant.status}
-                </StatusPill>
-              </td>
-              <td className='py-3 text-muted-foreground'>
-                {tenant.lastActive}
               </td>
             </tr>
           ))}
@@ -900,72 +687,6 @@ function MilestoneRow({
     </div>
   )
 }
-function PlanRow({
-  plan,
-  tenants,
-  mrr,
-  churnRisk,
-  conversion,
-}: {
-  plan: string
-  tenants: number
-  mrr: string
-  churnRisk: string
-  conversion: number
-}) {
-  return (
-    <div className='rounded-md border border-border bg-muted/40 p-3'>
-      <div className='mb-3 flex items-center justify-between'>
-        <div className='font-medium text-foreground'>{plan}</div>
-        <StatusPill tone={churnRisk === 'Low' ? 'good' : 'risk'}>
-          {churnRisk} risk
-        </StatusPill>
-      </div>
-      <div className='grid grid-cols-3 gap-3 text-xs'>
-        <div>
-          <div className='text-muted-foreground'>Tenants</div>
-          <div className='font-semibold'>{tenants}</div>
-        </div>
-        <div>
-          <div className='text-muted-foreground'>MRR</div>
-          <div className='font-semibold'>{mrr}</div>
-        </div>
-        <div>
-          <div className='text-muted-foreground'>Conversion</div>
-          <div className='font-semibold'>{conversion}%</div>
-        </div>
-      </div>
-    </div>
-  )
-}
-function InvoiceRow({
-  tenant,
-  amount,
-  status,
-  due,
-}: {
-  tenant: string
-  amount: string
-  status: string
-  due: string
-}) {
-  return (
-    <div className='flex items-center gap-3 py-3'>
-      <div className='min-w-0 flex-1'>
-        <div className='font-medium text-foreground'>{tenant}</div>
-        <div className='text-xs text-muted-foreground'>Due {due}</div>
-      </div>
-      <div className='font-medium'>{amount}</div>
-      <StatusPill
-        tone={
-          status === 'Paid' ? 'good' : status === 'Overdue' ? 'danger' : 'risk'
-        }
-      >
-        {status}
-      </StatusPill>
-    </div>
-  )
-}
 function statusTone(status: string) {
   return status === 'On track'
     ? 'good'
@@ -974,13 +695,4 @@ function statusTone(status: string) {
       : status === 'Delayed'
         ? 'danger'
         : ('muted' as const)
-}
-function tenantTone(status: string) {
-  return status === 'Active'
-    ? 'good'
-    : status === 'At risk'
-      ? 'risk'
-      : status === 'Suspended'
-        ? 'danger'
-        : ('neutral' as const)
 }

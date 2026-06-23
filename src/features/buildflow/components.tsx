@@ -1,16 +1,14 @@
-import { Link, Outlet, useLocation } from '@tanstack/react-router'
+import { Link, Outlet } from '@tanstack/react-router'
 import {
   Bell,
   ChevronDown,
   CircleHelp,
   Gauge,
   Grid2X2,
-  Layers3,
   Menu,
   Moon,
   Search,
   Settings,
-  SquareMenu,
   Sun,
   Users,
 } from 'lucide-react'
@@ -34,18 +32,7 @@ const workspaceLinks = [
   { label: 'Team & organisation', to: '/team', icon: Users },
 ]
 
-const platformLinks = [
-  { label: 'Tenants', to: '/tenants', icon: SquareMenu },
-  { label: 'Subscriptions', to: '/subscriptions', icon: Layers3 },
-]
-
 export function BuildFlowShell() {
-  const location = useLocation()
-  const isPlatform = ['/tenants', '/subscriptions'].some((path) =>
-    location.pathname.startsWith(path)
-  )
-  const links = isPlatform ? platformLinks : workspaceLinks
-
   return (
     <div className='min-h-svh bg-background text-[13px] text-foreground antialiased'>
       <header className='sticky top-0 z-30 flex h-14 items-center border-b border-border bg-background/95 px-3 backdrop-blur md:px-4'>
@@ -62,10 +49,7 @@ export function BuildFlowShell() {
           <SheetContent side='left' className='w-72 bg-background p-0'>
             <BrandBlock />
             <div className='p-3'>
-              <NavSection
-                title={isPlatform ? 'Platform' : 'Workspace'}
-                items={links}
-              />
+              <NavSection title='Workspace' items={workspaceLinks} />
             </div>
           </SheetContent>
         </Sheet>
@@ -74,22 +58,15 @@ export function BuildFlowShell() {
           <BrandBlock compact />
         </div>
 
-        <div className='flex rounded-md border border-border bg-muted p-1 shadow-inner'>
-          <ModeLink active={!isPlatform} to='/' label='Tenant workspace' />
-          <ModeLink active={isPlatform} to='/tenants' label='Platform admin' />
-        </div>
-
         <div className='ms-auto flex items-center gap-2 md:gap-3'>
-          {!isPlatform && (
-            <Button
-              variant='outline'
-              className='hidden h-9 gap-2 rounded-md border-border bg-card px-3 font-normal shadow-xs lg:flex'
-            >
-              <span className='size-4 rounded bg-primary/20 ring-1 ring-primary/25' />
-              Current workspace
-              <ChevronDown className='size-3' />
-            </Button>
-          )}
+          <Button
+            variant='outline'
+            className='hidden h-9 gap-2 rounded-md border-border bg-card px-3 font-normal shadow-xs lg:flex'
+          >
+            <span className='size-4 rounded bg-primary/20 ring-1 ring-primary/25' />
+            Current workspace
+            <ChevronDown className='size-3' />
+          </Button>
           <div className='relative hidden sm:block'>
             <Search className='absolute start-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground' />
             <Input
@@ -114,10 +91,7 @@ export function BuildFlowShell() {
       <div className='grid min-h-[calc(100svh-3.5rem)] grid-cols-1 gap-4 md:grid-cols-[244px_1fr] md:p-4 md:pe-0'>
         <aside className='sticky top-[4.5rem] hidden h-[calc(100svh-5.5rem)] rounded-lg border border-sidebar-border bg-sidebar shadow-sm md:flex md:flex-col'>
           <nav className='flex-1 p-3'>
-            <NavSection
-              title={isPlatform ? 'Platform' : 'Workspace'}
-              items={links}
-            />
+            <NavSection title='Workspace' items={workspaceLinks} />
           </nav>
           <div className='border-t border-sidebar-border p-3'>
             <SideUtility icon={Settings} label='Settings' />
@@ -169,28 +143,6 @@ function BrandBlock({ compact = false }: { compact?: boolean }) {
         BUILDFLOW
       </div>
     </div>
-  )
-}
-
-function ModeLink({
-  active,
-  to,
-  label,
-}: {
-  active: boolean
-  to: string
-  label: string
-}) {
-  return (
-    <Link
-      to={to}
-      className={cn(
-        'rounded-sm px-3 py-1.5 text-xs text-muted-foreground transition hover:text-foreground md:px-4',
-        active && 'bg-card text-foreground shadow-sm'
-      )}
-    >
-      {label}
-    </Link>
   )
 }
 
@@ -382,7 +334,11 @@ export function EmptyPage({
   )
 }
 
-export function EmptyState({ message = 'No data available.' }: { message?: string }) {
+export function EmptyState({
+  message = 'No data available.',
+}: {
+  message?: string
+}) {
   return (
     <div className='rounded-sm border border-dashed border-border bg-muted/40 p-8 text-center text-sm text-muted-foreground'>
       {message}
