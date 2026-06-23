@@ -563,6 +563,8 @@ WHERE pr.deleted_at IS NULL;
 -- Standard policy (the doc's literal write-wide form): matching tenant OR an
 -- authenticated platform admin. For read-wide/write-narrow hardening, drop the
 -- fn_is_platform_admin() term from WITH CHECK (see BACKEND.md §6 note).
+-- NULLIF(..., '') guards the cast: SET LOCAL leaves the placeholder GUC as ''
+-- (not NULL) on a pooled connection after a txn, and ''::uuid would raise 22P02.
 DO $$
 DECLARE t text;
 BEGIN
@@ -577,9 +579,9 @@ BEGIN
         EXECUTE format($f$
             CREATE POLICY tenant_isolation ON %I
                 USING      (fn_is_platform_admin()
-                            OR tenant_id = current_setting('app.current_tenant_id', true)::uuid)
+                            OR tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid)
                 WITH CHECK (fn_is_platform_admin()
-                            OR tenant_id = current_setting('app.current_tenant_id', true)::uuid)
+                            OR tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid)
         $f$, t);
     END LOOP;
 END $$;
@@ -605,7 +607,7 @@ ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tenants FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenants_access ON tenants
     USING      (fn_is_platform_admin()
-                OR id = current_setting('app.current_tenant_id', true)::uuid)
+                OR id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid)
     WITH CHECK (fn_is_platform_admin());
 
 -- roles: system rows (tenant_id NULL) visible to all.
@@ -614,9 +616,9 @@ ALTER TABLE roles FORCE ROW LEVEL SECURITY;
 CREATE POLICY roles_visible ON roles
     USING (fn_is_platform_admin()
            OR tenant_id IS NULL
-           OR tenant_id = current_setting('app.current_tenant_id', true)::uuid)
+           OR tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid)
     WITH CHECK (fn_is_platform_admin()
-           OR tenant_id = current_setting('app.current_tenant_id', true)::uuid);
+           OR tenant_id = NULLIF(current_setting('app.current_tenant_id', true), '')::uuid);
 
 -- permissions: global catalog, read-all. role_permissions follows role visibility.
 -- platform_admins/sessions/refresh_tokens: operator-only, reached via the auth

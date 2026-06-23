@@ -12,6 +12,17 @@ const FORM_MESSAGES = {
 const navigate = vi.fn()
 const setUserMock = vi.fn()
 const setAccessTokenMock = vi.fn()
+const loginMock = vi.fn().mockResolvedValue({
+  access_token: 'tok',
+  token_type: 'Bearer',
+  expires_in: 900,
+})
+const getMeMock = vi.fn().mockResolvedValue({
+  user: { id: 'u1', email: 'a@b.com', full_name: 'Aa Bb', status: 'active' },
+  tenant: { id: 't1', name: 'Firm', slug: 'firm' },
+  assignments: [],
+  permissions: { tenant: [], by_scope: {} },
+})
 
 vi.mock('@/stores/auth-store', () => ({
   useAuthStore: () => ({
@@ -44,9 +55,9 @@ vi.mock('@tanstack/react-router', async (importOriginal) => {
   }
 })
 
-vi.mock('@/lib/utils', async (orig) => ({
-  ...(await orig()),
-  sleep: vi.fn(() => Promise.resolve()),
+vi.mock('@/lib/auth-api', () => ({
+  login: (...args: unknown[]) => loginMock(...args),
+  getMe: (...args: unknown[]) => getMeMock(...args),
 }))
 
 describe('UserAuthForm', () => {
@@ -93,14 +104,13 @@ describe('UserAuthForm', () => {
       await vi.waitFor(() => expect(setUserMock).toHaveBeenCalledOnce())
       expect(setUserMock).toHaveBeenCalledWith(
         expect.objectContaining({
+          id: 'u1',
           email: 'a@b.com',
-          accountNo: expect.any(String),
-          role: expect.any(Array),
-          exp: expect.any(Number),
+          full_name: 'Aa Bb',
         })
       )
       expect(setAccessTokenMock).toHaveBeenCalledOnce()
-      expect(setAccessTokenMock).toHaveBeenCalledWith('mock-access-token')
+      expect(setAccessTokenMock).toHaveBeenCalledWith('tok')
 
       await vi.waitFor(() =>
         expect(navigate).toHaveBeenCalledWith({ to: '/', replace: true })

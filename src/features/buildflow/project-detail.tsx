@@ -34,108 +34,33 @@ import {
   leafStatus,
   type BoqLeaf,
 } from './boq'
-import { MetricCard, Panel, StatusPill } from './components'
-import { projects, systems } from './data'
+import { EmptyState, MetricCard, Panel, StatusPill } from './components'
+import { projects, systems, type Project } from './data'
 
-// Exact BoQ grid columns from wireframe (decoded design L265).
 const GRID = '74px 1.9fr 52px 100px 96px 104px 168px 104px'
 
-const projectMeta = [
-  ['Client', 'Meridian Construction Ltd'],
-  ['Contract', 'JCT D&B 2016'],
-  ['Location', 'Riverside, Leeds'],
-  ['Start on site', '12 Jan 2026'],
-  ['Practical completion', '30 Nov 2026'],
-  ['Quantity surveyor', 'A. Okafor'],
-]
+const projectMeta: [string, string][] = []
 
-const workPackages = [
-  { name: 'Substructure', pct: 92 },
-  { name: 'Superstructure', pct: 48 },
-  { name: 'Envelope', pct: 14 },
-  { name: 'MEP first fix', pct: 31 },
-  { name: 'Fit-out', pct: 6 },
-]
+const workPackages: { name: string; pct: number }[] = []
 
-const progressKpis = [
-  { label: 'Earned value', value: '£612k', sub: 'of £1.42m contract' },
-  { label: 'Schedule variance', value: '−4 d', sub: '2 packages slipping' },
-  { label: 'Cost variance', value: '+£18k', sub: 'forecast over budget' },
-]
+const progressKpis: { label: string; value: string; sub: string }[] = []
 
-const gantt = [
-  { name: 'Enabling works', start: 0, span: 1 },
-  { name: 'Substructure', start: 0.4, span: 1.1 },
-  { name: 'Superstructure', start: 1.2, span: 1.6 },
-  { name: 'Envelope', start: 2.2, span: 1.2 },
-  { name: 'MEP', start: 2.0, span: 1.5 },
-  { name: 'Fit-out & handover', start: 3.0, span: 1.0 },
-]
+const gantt: { name: string; start: number; span: number }[] = []
 
-const documents = [
-  {
-    name: 'tender_BoQ_rev2.xlsx',
-    ext: 'XLS',
-    type: 'Bill of quantities',
-    size: '186 KB',
-    updated: '2 days ago',
-  },
-  {
-    name: 'GA_drawings_set_C.pdf',
-    ext: 'PDF',
-    type: 'Drawings',
-    size: '12.4 MB',
-    updated: '5 days ago',
-  },
-  {
-    name: 'programme_v4.mpp',
-    ext: 'MPP',
-    type: 'Programme',
-    size: '904 KB',
-    updated: '1 week ago',
-  },
-  {
-    name: 'site_diary_wk12.pdf',
-    ext: 'PDF',
-    type: 'Site record',
-    size: '2.1 MB',
-    updated: '1 week ago',
-  },
-  {
-    name: 'valuation_05.pdf',
-    ext: 'PDF',
-    type: 'Valuation',
-    size: '430 KB',
-    updated: '2 weeks ago',
-  },
-]
+const documents: {
+  name: string
+  ext: string
+  type: string
+  size: string
+  updated: string
+}[] = []
 
-const projectTeam = [
-  {
-    initials: 'AO',
-    name: 'A. Okafor',
-    email: 'a.okafor@meridian.co',
-    role: 'Project manager',
-  },
-  {
-    initials: 'LM',
-    name: 'L. Marsh',
-    email: 'l.marsh@meridian.co',
-    role: 'Quantity surveyor',
-  },
-  {
-    initials: 'DS',
-    name: 'D. Singh',
-    email: 'd.singh@meridian.co',
-    role: 'Site manager',
-  },
-  {
-    initials: 'RA',
-    name: 'R. Adeyemi',
-    email: 'r.adeyemi@meridian.co',
-    role: 'Engineer',
-  },
-]
+const projectTeam: {
+  initials: string
+  name: string
+  email: string
+  role: string
+}[] = []
 
 type Revision = {
   rev: string
@@ -146,24 +71,7 @@ type Revision = {
   by: string
 }
 
-const seedRevisions: Revision[] = [
-  {
-    rev: '2',
-    status: 'Active',
-    tone: 'good',
-    note: 'Re-measure of curtain walling after design freeze',
-    date: '14 Mar',
-    by: 'A. Okafor',
-  },
-  {
-    rev: '1',
-    status: 'Superseded',
-    tone: 'muted',
-    note: 'Initial tender BoQ import',
-    date: '12 Jan',
-    by: 'L. Marsh',
-  },
-]
+const seedRevisions: Revision[] = []
 
 const projectTabs = [
   { value: 'overview', label: 'Overview' },
@@ -185,14 +93,15 @@ const statusTone = (s: string) =>
 
 export function ProjectDetailPage() {
   const { code } = useParams({ from: '/_authenticated/projects/$code' })
-  const project = projects.find((p) => p.code === code) ?? projects[0]
+  const project = projects.find((p) => p.code === code)
   const [tab, setTab] = useState('boq')
+
+  if (!project) return <EmptyState message='Project not found.' />
 
   const tabLabel = projectTabs.find((t) => t.value === tab)?.label ?? 'Overview'
 
   return (
     <div>
-      {/* breadcrumb — wireframe L157-162 */}
       <div className='mb-3 flex items-center gap-2 text-xs text-muted-foreground'>
         <Link to='/projects' className='hover:text-foreground'>
           Projects
@@ -203,7 +112,6 @@ export function ProjectDetailPage() {
         <span className='font-medium text-foreground'>{tabLabel}</span>
       </div>
 
-      {/* project header — wireframe L163-170 */}
       <div className='mb-4 flex flex-wrap items-start justify-between gap-4'>
         <div>
           <div className='flex items-center gap-3'>
@@ -215,7 +123,7 @@ export function ProjectDetailPage() {
             </StatusPill>
           </div>
           <div className='mt-1 font-mono text-xs text-muted-foreground'>
-            {project.code} · Meridian Construction Ltd · Riverside, Leeds
+            {project.code}
           </div>
         </div>
         <div className='text-right'>
@@ -229,7 +137,6 @@ export function ProjectDetailPage() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
-        {/* tab bar — wireframe L171-176 */}
         <TabsList className='mb-5 h-auto flex-wrap justify-start gap-1 rounded-none border-b border-border bg-transparent p-0'>
           {projectTabs.map((t) => (
             <TabsTrigger
@@ -265,8 +172,7 @@ export function ProjectDetailPage() {
   )
 }
 
-// ---- OVERVIEW (wireframe L178-197) ----
-function OverviewTab({ project }: { project: (typeof projects)[number] }) {
+function OverviewTab({ project }: { project: Project }) {
   return (
     <div>
       <div className='mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
@@ -296,14 +202,21 @@ function OverviewTab({ project }: { project: (typeof projects)[number] }) {
       </div>
       <div className='grid gap-4 xl:grid-cols-2'>
         <Panel title='Project details'>
-          <div className='divide-y divide-border'>
-            {projectMeta.map(([label, value]) => (
-              <div key={label} className='flex justify-between py-2.5 text-xs'>
-                <span className='text-muted-foreground'>{label}</span>
-                <span className='font-medium text-foreground'>{value}</span>
-              </div>
-            ))}
-          </div>
+          {projectMeta.length ? (
+            <div className='divide-y divide-border'>
+              {projectMeta.map(([label, value]) => (
+                <div
+                  key={label}
+                  className='flex justify-between py-2.5 text-xs'
+                >
+                  <span className='text-muted-foreground'>{label}</span>
+                  <span className='font-medium text-foreground'>{value}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState message='No project details available.' />
+          )}
         </Panel>
         <Panel title='Progress by work package'>
           <WorkPackages />
@@ -316,22 +229,27 @@ function OverviewTab({ project }: { project: (typeof projects)[number] }) {
 function WorkPackages() {
   return (
     <div className='space-y-3'>
-      {workPackages.map((w) => (
-        <div key={w.name}>
-          <div className='mb-1.5 flex justify-between text-xs text-foreground'>
-            <span>{w.name}</span>
-            <span className='font-mono text-muted-foreground'>{w.pct}%</span>
+      {workPackages.length ? (
+        workPackages.map((w) => (
+          <div key={w.name}>
+            <div className='mb-1.5 flex justify-between text-xs text-foreground'>
+              <span>{w.name}</span>
+              <span className='font-mono text-muted-foreground'>{w.pct}%</span>
+            </div>
+            <Progress value={w.pct} className='h-2 bg-muted' />
           </div>
-          <Progress value={w.pct} className='h-2 bg-muted' />
-        </div>
-      ))}
+        ))
+      ) : (
+        <EmptyState message='No work packages available.' />
+      )}
     </div>
   )
 }
 
-// ---- BILL OF QUANTITIES (wireframe L199-386) ----
 function BoqTab({ projectName }: { projectName: string }) {
-  const [stage, setStage] = useState<'empty' | 'import' | 'data'>('data')
+  const [stage, setStage] = useState<'empty' | 'import' | 'data'>(
+    boqSeedLeaves.length ? 'data' : 'empty'
+  )
   const [mode, setMode] = useState<'active' | 'draft'>('active')
   const [subTab, setSubTab] = useState<'quantities' | 'revisions' | 'field'>(
     'quantities'
@@ -382,7 +300,6 @@ function BoqTab({ projectName }: { projectName: string }) {
 
   return (
     <div>
-      {/* revision / mode bar — wireframe L243-255 */}
       {mode === 'active' ? (
         <div className='mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-card p-3'>
           <div className='flex items-center gap-3'>
@@ -391,7 +308,7 @@ function BoqTab({ projectName }: { projectName: string }) {
             </span>
             <StatusPill tone='good'>Active</StatusPill>
             <span className='text-xs text-muted-foreground'>
-              Issued 14 Mar · A. Okafor
+              Current revision
             </span>
           </div>
           <div className='flex gap-2'>
@@ -435,7 +352,6 @@ function BoqTab({ projectName }: { projectName: string }) {
         </div>
       )}
 
-      {/* BoQ secondary nav — wireframe L257-260 */}
       <div className='mb-3 flex gap-1'>
         {(['quantities', 'revisions', 'field'] as const).map((s) => (
           <button
@@ -517,24 +433,12 @@ function BoqEmpty({
   )
 }
 
-const importMappings = [
-  { src: 'Item Ref', field: 'Code', match: 'Exact', tone: 'good' as const },
-  {
-    src: 'Description of Works',
-    field: 'Description',
-    match: 'Exact',
-    tone: 'good' as const,
-  },
-  { src: 'UoM', field: 'Unit', match: 'Likely', tone: 'risk' as const },
-  { src: 'Quantity', field: 'Quantity', match: 'Exact', tone: 'good' as const },
-  { src: 'Rate (£)', field: 'Rate', match: 'Exact', tone: 'good' as const },
-  {
-    src: 'Amount',
-    field: 'Amount (derived)',
-    match: 'Review',
-    tone: 'risk' as const,
-  },
-]
+const importMappings: {
+  src: string
+  field: string
+  match: string
+  tone: 'good' | 'risk'
+}[] = []
 
 function BoqImport({
   onCancel,
@@ -545,7 +449,6 @@ function BoqImport({
 }) {
   return (
     <div>
-      {/* stepper — wireframe L219-223 */}
       <div className='mb-5 flex items-center gap-3'>
         <Step n={1} label='Upload file' />
         <div className='h-px w-8 bg-border' />
@@ -573,7 +476,7 @@ function BoqImport({
             </div>
             <div className='flex-1'>
               <div className='text-xs font-medium text-foreground'>
-                tender_BoQ.xlsx
+                Selected file
               </div>
               <div className='text-[11px] text-muted-foreground'>
                 142 rows detected
@@ -595,23 +498,27 @@ function BoqImport({
             <div>BoQ field</div>
             <div>Match</div>
           </div>
-          {importMappings.map((m) => (
-            <div
-              key={m.src}
-              className='grid items-center gap-2 border-b border-border py-2.5'
-              style={{ gridTemplateColumns: '1fr 28px 1fr 80px' }}
-            >
-              <div className='rounded border border-border bg-muted px-2 py-1.5 font-mono text-[11px] text-muted-foreground'>
-                {m.src}
+          {importMappings.length ? (
+            importMappings.map((m) => (
+              <div
+                key={m.src}
+                className='grid items-center gap-2 border-b border-border py-2.5'
+                style={{ gridTemplateColumns: '1fr 28px 1fr 80px' }}
+              >
+                <div className='rounded border border-border bg-muted px-2 py-1.5 font-mono text-[11px] text-muted-foreground'>
+                  {m.src}
+                </div>
+                <div className='text-center text-muted-foreground'>→</div>
+                <div className='flex justify-between rounded-md border border-border px-2.5 py-1.5 text-xs text-foreground'>
+                  <span>{m.field}</span>
+                  <ChevronDown className='size-3 text-muted-foreground' />
+                </div>
+                <StatusPill tone={m.tone}>{m.match}</StatusPill>
               </div>
-              <div className='text-center text-muted-foreground'>→</div>
-              <div className='flex justify-between rounded-md border border-border px-2.5 py-1.5 text-xs text-foreground'>
-                <span>{m.field}</span>
-                <ChevronDown className='size-3 text-muted-foreground' />
-              </div>
-              <StatusPill tone={m.tone}>{m.match}</StatusPill>
-            </div>
-          ))}
+            ))
+          ) : (
+            <EmptyState message='No column mappings available.' />
+          )}
           <div className='mt-4 flex justify-end gap-2'>
             <Button
               variant='outline'
@@ -712,7 +619,6 @@ function QuantitiesGrid({
   return (
     <div className='overflow-x-auto rounded-lg border border-border bg-card'>
       <div className='min-w-[920px]'>
-        {/* header — wireframe L265-272 */}
         <div
           className='grid border-b border-border bg-muted/60 text-[10px] tracking-wide text-muted-foreground uppercase'
           style={{ gridTemplateColumns: GRID }}
@@ -733,7 +639,6 @@ function QuantitiesGrid({
 
         {totals.sections.map((sec) => (
           <div key={sec.section.id}>
-            {/* section header — wireframe L276-285 */}
             <div className='flex items-center justify-between bg-muted/40 px-2.5 py-2'>
               <div className='flex items-center gap-2 text-xs font-semibold text-foreground'>
                 <span className='grid size-5 place-items-center rounded bg-muted text-[10px] text-muted-foreground'>
@@ -752,7 +657,6 @@ function QuantitiesGrid({
               </div>
             </div>
 
-            {/* leaf rows — wireframe L288-325 */}
             {sec.leaves.map((l) => {
               const st = leafStatus(l.pct)
               return (
@@ -797,7 +701,6 @@ function QuantitiesGrid({
               )
             })}
 
-            {/* subtotal — wireframe L328-335 */}
             <div
               className='grid bg-muted/30 text-[11px]'
               style={{ gridTemplateColumns: GRID }}
@@ -819,7 +722,6 @@ function QuantitiesGrid({
           </div>
         ))}
 
-        {/* contract total — wireframe L338-343 */}
         <div
           className='grid border-t border-border bg-muted/60 text-xs'
           style={{ gridTemplateColumns: GRID }}
@@ -910,32 +812,35 @@ function RevisionHistory({ revisions }: { revisions: Revision[] }) {
       title='Revision history'
       description='Each change to quantities or rates is saved as a new revision. The active revision is the baseline for progress & valuation; earlier revisions are kept and marked superseded.'
     >
-      <div className='divide-y divide-border'>
-        {revisions.map((rv) => (
-          <div
-            key={rv.rev}
-            className='grid items-center gap-3 py-3 text-xs'
-            style={{ gridTemplateColumns: '80px 110px 1fr 140px 60px' }}
-          >
-            <span className='w-fit rounded-md bg-muted px-2 py-1 text-[11px] font-semibold text-foreground'>
-              Rev {rv.rev}
-            </span>
-            <StatusPill tone={rv.tone}>{rv.status}</StatusPill>
-            <span className='text-foreground'>{rv.note}</span>
-            <span className='text-muted-foreground'>
-              {rv.date} · {rv.by}
-            </span>
-            <button className='text-right text-[11px] text-muted-foreground hover:text-foreground'>
-              View →
-            </button>
-          </div>
-        ))}
-      </div>
+      {revisions.length ? (
+        <div className='divide-y divide-border'>
+          {revisions.map((rv) => (
+            <div
+              key={rv.rev}
+              className='grid items-center gap-3 py-3 text-xs'
+              style={{ gridTemplateColumns: '80px 110px 1fr 140px 60px' }}
+            >
+              <span className='w-fit rounded-md bg-muted px-2 py-1 text-[11px] font-semibold text-foreground'>
+                Rev {rv.rev}
+              </span>
+              <StatusPill tone={rv.tone}>{rv.status}</StatusPill>
+              <span className='text-foreground'>{rv.note}</span>
+              <span className='text-muted-foreground'>
+                {rv.date} · {rv.by}
+              </span>
+              <button className='text-right text-[11px] text-muted-foreground hover:text-foreground'>
+                View →
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <EmptyState message='No revisions available.' />
+      )}
     </Panel>
   )
 }
 
-// ---- FIELD UPDATE (wireframe L364-382) ----
 function FieldUpdate({
   projectName,
   leaves,
@@ -960,7 +865,6 @@ function FieldUpdate({
 
   return (
     <div className='flex flex-wrap gap-8'>
-      {/* phone mock */}
       <div className='w-[330px] overflow-hidden rounded-[34px] border-[10px] border-muted bg-card shadow-lg'>
         <div className='flex h-7 items-center justify-center bg-muted'>
           <div className='h-1.5 w-20 rounded bg-border' />
@@ -1022,7 +926,6 @@ function FieldUpdate({
         </div>
       </div>
 
-      {/* explainer */}
       <div className='max-w-md flex-1 pt-2'>
         <div className='mb-2 text-[11px] tracking-[0.16em] text-muted-foreground uppercase'>
           On-site quick update
@@ -1083,9 +986,7 @@ function ExportDialog() {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Export Bill of Quantities</DialogTitle>
-          <DialogDescription>
-            Frontend mockup — no file is generated.
-          </DialogDescription>
+          <DialogDescription>Choose an export format.</DialogDescription>
         </DialogHeader>
         <div className='grid gap-3 py-2'>
           <Select defaultValue='xlsx'>
@@ -1105,23 +1006,26 @@ function ExportDialog() {
   )
 }
 
-// ---- PROGRESS & INTEGRATIONS (wireframe L388-412) ----
 function ProgressTab() {
   return (
     <div>
       <div className='mb-4 grid gap-4 xl:grid-cols-[1.5fr_1fr]'>
         <Panel title='S-curve · planned vs actual'>
-          <SCurve />
+          <EmptyState message='No progress curve available.' />
         </Panel>
         <div className='grid gap-4'>
-          {progressKpis.map((k) => (
-            <MetricCard
-              key={k.label}
-              label={k.label}
-              value={k.value}
-              hint={k.sub}
-            />
-          ))}
+          {progressKpis.length ? (
+            progressKpis.map((k) => (
+              <MetricCard
+                key={k.label}
+                label={k.label}
+                value={k.value}
+                hint={k.sub}
+              />
+            ))
+          ) : (
+            <EmptyState message='No progress metrics available.' />
+          )}
         </div>
       </div>
       <div className='grid gap-4 xl:grid-cols-2'>
@@ -1136,127 +1040,36 @@ function ProgressTab() {
             </Button>
           }
         >
-          <div className='divide-y divide-border'>
-            {systems.map((g) => (
-              <div key={g.name} className='flex items-center gap-3 py-2.5'>
-                <div className='grid size-8 flex-none place-items-center rounded-md bg-muted text-[11px] font-semibold text-muted-foreground'>
-                  {g.initials}
-                </div>
-                <div className='min-w-0 flex-1'>
-                  <div className='text-xs font-medium text-foreground'>
-                    {g.name}
+          {systems.length ? (
+            <div className='divide-y divide-border'>
+              {systems.map((g) => (
+                <div key={g.name} className='flex items-center gap-3 py-2.5'>
+                  <div className='grid size-8 flex-none place-items-center rounded-md bg-muted text-[11px] font-semibold text-muted-foreground'>
+                    {g.initials}
                   </div>
-                  <div className='text-[11px] text-muted-foreground'>
-                    {g.type} · synced {g.sync}
+                  <div className='min-w-0 flex-1'>
+                    <div className='text-xs font-medium text-foreground'>
+                      {g.name}
+                    </div>
+                    <div className='text-[11px] text-muted-foreground'>
+                      {g.type} · synced {g.sync}
+                    </div>
                   </div>
+                  <StatusPill tone={g.status === 'Connected' ? 'good' : 'risk'}>
+                    {g.status}
+                  </StatusPill>
                 </div>
-                <StatusPill tone={g.status === 'Connected' ? 'good' : 'risk'}>
-                  {g.status}
-                </StatusPill>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState message='No project integrations available.' />
+          )}
         </Panel>
       </div>
     </div>
   )
 }
 
-function SCurve() {
-  return (
-    <div>
-      <div className='mb-2 flex justify-end gap-4 text-[11px] text-muted-foreground'>
-        <span className='flex items-center gap-1.5'>
-          <span className='inline-block w-3.5 border-t-2 border-muted-foreground' />{' '}
-          Planned
-        </span>
-        <span className='flex items-center gap-1.5'>
-          <span className='inline-block w-3.5 border-t-2 border-dashed border-primary' />{' '}
-          Actual
-        </span>
-      </div>
-      <svg viewBox='0 0 460 220' className='block h-auto w-full'>
-        <line x1='40' y1='10' x2='40' y2='186' stroke='var(--border)' />
-        <line x1='40' y1='186' x2='450' y2='186' stroke='var(--border)' />
-        <line
-          x1='40'
-          y1='142'
-          x2='450'
-          y2='142'
-          stroke='var(--border)'
-          opacity='0.5'
-        />
-        <line
-          x1='40'
-          y1='98'
-          x2='450'
-          y2='98'
-          stroke='var(--border)'
-          opacity='0.5'
-        />
-        <line
-          x1='40'
-          y1='54'
-          x2='450'
-          y2='54'
-          stroke='var(--border)'
-          opacity='0.5'
-        />
-        {[
-          ['0', 189],
-          ['25', 146],
-          ['50', 102],
-          ['75', 58],
-          ['100', 16],
-        ].map(([t, y]) => (
-          <text
-            key={t}
-            x='30'
-            y={y as number}
-            textAnchor='end'
-            fontSize='9'
-            fill='var(--muted-foreground)'
-          >
-            {t}
-          </text>
-        ))}
-        <path
-          d='M40,184 C140,178 180,150 230,108 C280,66 330,30 450,16'
-          fill='none'
-          stroke='var(--muted-foreground)'
-          strokeWidth='2'
-        />
-        <path
-          d='M40,184 C130,180 170,162 220,132 C250,114 270,108 300,104'
-          fill='none'
-          stroke='var(--primary)'
-          strokeWidth='2'
-          strokeDasharray='5 4'
-        />
-        <circle cx='300' cy='104' r='3.5' fill='var(--primary)' />
-        <line
-          x1='300'
-          y1='14'
-          x2='300'
-          y2='186'
-          stroke='var(--border)'
-          strokeDasharray='2 3'
-        />
-        <text
-          x='300'
-          y='202'
-          textAnchor='middle'
-          fontSize='9'
-          fill='var(--muted-foreground)'
-        >
-          Today
-        </text>
-      </svg>
-    </div>
-  )
-}
-
-// ---- SCHEDULE (wireframe L414-421) ----
 function ScheduleTab() {
   return (
     <Panel title='Programme · indicative Gantt'>
@@ -1267,29 +1080,32 @@ function ScheduleTab() {
           </div>
         ))}
       </div>
-      <div className='mt-2 space-y-2'>
-        {gantt.map((g) => (
-          <div key={g.name} className='flex items-center'>
-            <div className='w-40 flex-none text-xs text-foreground'>
-              {g.name}
+      {gantt.length ? (
+        <div className='mt-2 space-y-2'>
+          {gantt.map((g) => (
+            <div key={g.name} className='flex items-center'>
+              <div className='w-40 flex-none text-xs text-foreground'>
+                {g.name}
+              </div>
+              <div className='relative h-5 flex-1 rounded bg-muted'>
+                <div
+                  className='absolute inset-y-0 rounded bg-primary/70'
+                  style={{
+                    left: `${(g.start / 4) * 100}%`,
+                    width: `${(g.span / 4) * 100}%`,
+                  }}
+                />
+              </div>
             </div>
-            <div className='relative h-5 flex-1 rounded bg-muted'>
-              <div
-                className='absolute inset-y-0 rounded bg-primary/70'
-                style={{
-                  left: `${(g.start / 4) * 100}%`,
-                  width: `${(g.span / 4) * 100}%`,
-                }}
-              />
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <EmptyState message='No schedule available.' />
+      )}
     </Panel>
   )
 }
 
-// ---- DOCUMENTS (wireframe L423-430) ----
 function DocumentsTab() {
   return (
     <Panel
@@ -1309,30 +1125,33 @@ function DocumentsTab() {
         <div>Size</div>
         <div>Updated</div>
       </div>
-      {documents.map((d) => (
-        <div
-          key={d.name}
-          className='grid items-center gap-2.5 border-b border-border py-2.5 text-xs'
-          style={{ gridTemplateColumns: '1.8fr 110px 90px 130px' }}
-        >
-          <div className='flex items-center gap-2.5'>
-            <span className='grid size-7 flex-none place-items-center rounded bg-muted text-[9px] font-semibold text-muted-foreground'>
-              {d.ext}
-            </span>
-            <span className='font-medium text-foreground'>{d.name}</span>
+      {documents.length ? (
+        documents.map((d) => (
+          <div
+            key={d.name}
+            className='grid items-center gap-2.5 border-b border-border py-2.5 text-xs'
+            style={{ gridTemplateColumns: '1.8fr 110px 90px 130px' }}
+          >
+            <div className='flex items-center gap-2.5'>
+              <span className='grid size-7 flex-none place-items-center rounded bg-muted text-[9px] font-semibold text-muted-foreground'>
+                {d.ext}
+              </span>
+              <span className='font-medium text-foreground'>{d.name}</span>
+            </div>
+            <div className='text-muted-foreground'>{d.type}</div>
+            <div className='font-mono text-[11px] text-muted-foreground'>
+              {d.size}
+            </div>
+            <div className='text-[11px] text-muted-foreground'>{d.updated}</div>
           </div>
-          <div className='text-muted-foreground'>{d.type}</div>
-          <div className='font-mono text-[11px] text-muted-foreground'>
-            {d.size}
-          </div>
-          <div className='text-[11px] text-muted-foreground'>{d.updated}</div>
-        </div>
-      ))}
+        ))
+      ) : (
+        <EmptyState message='No documents available.' />
+      )}
     </Panel>
   )
 }
 
-// ---- TEAM (wireframe L432-438) ----
 function TeamTab() {
   return (
     <Panel
@@ -1344,22 +1163,28 @@ function TeamTab() {
       }
     >
       <div className='divide-y divide-border'>
-        {projectTeam.map((u) => (
-          <div key={u.email} className='flex items-center gap-3 py-2.5'>
-            <span className='grid size-8 flex-none place-items-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground'>
-              {u.initials}
-            </span>
-            <div className='flex-1'>
-              <div className='text-xs font-medium text-foreground'>
-                {u.name}
+        {projectTeam.length ? (
+          projectTeam.map((u) => (
+            <div key={u.email} className='flex items-center gap-3 py-2.5'>
+              <span className='grid size-8 flex-none place-items-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground'>
+                {u.initials}
+              </span>
+              <div className='flex-1'>
+                <div className='text-xs font-medium text-foreground'>
+                  {u.name}
+                </div>
+                <div className='text-[11px] text-muted-foreground'>
+                  {u.email}
+                </div>
               </div>
-              <div className='text-[11px] text-muted-foreground'>{u.email}</div>
+              <div className='rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground'>
+                {u.role}
+              </div>
             </div>
-            <div className='rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground'>
-              {u.role}
-            </div>
-          </div>
-        ))}
+          ))
+        ) : (
+          <EmptyState message='No project team available.' />
+        )}
       </div>
     </Panel>
   )

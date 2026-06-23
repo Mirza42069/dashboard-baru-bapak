@@ -35,6 +35,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  EmptyState,
   EmptyPage,
   MetricCard,
   PageHeader,
@@ -79,59 +80,67 @@ export function TenantDashboard() {
           title='Spend curve'
           description='Planned vs actual portfolio spend, £k'
         >
-          <ChartContainer config={spendConfig} className='h-64 w-full'>
-            <AreaChart
-              data={spendSeries}
-              margin={{ left: 0, right: 8, top: 8 }}
-            >
-              <defs>
-                <linearGradient id='actual' x1='0' y1='0' x2='0' y2='1'>
-                  <stop
-                    offset='5%'
-                    stopColor='var(--primary)'
-                    stopOpacity={0.22}
-                  />
-                  <stop
-                    offset='95%'
-                    stopColor='var(--primary)'
-                    stopOpacity={0.02}
-                  />
-                </linearGradient>
-              </defs>
-              <CartesianGrid vertical={false} stroke='var(--border)' />
-              <XAxis
-                dataKey='month'
-                tickLine={false}
-                axisLine={false}
-                tickMargin={8}
-              />
-              <ChartTooltip content={<ChartTooltipContent />} />
-              <Area
-                dataKey='planned'
-                type='monotone'
-                stroke='var(--muted-foreground)'
-                fill='transparent'
-                strokeDasharray='4 4'
-              />
-              <Area
-                dataKey='actual'
-                type='monotone'
-                stroke='var(--primary)'
-                fill='url(#actual)'
-                strokeWidth={2}
-              />
-            </AreaChart>
-          </ChartContainer>
+          {spendSeries.length ? (
+            <ChartContainer config={spendConfig} className='h-64 w-full'>
+              <AreaChart
+                data={spendSeries}
+                margin={{ left: 0, right: 8, top: 8 }}
+              >
+                <defs>
+                  <linearGradient id='actual' x1='0' y1='0' x2='0' y2='1'>
+                    <stop
+                      offset='5%'
+                      stopColor='var(--primary)'
+                      stopOpacity={0.22}
+                    />
+                    <stop
+                      offset='95%'
+                      stopColor='var(--primary)'
+                      stopOpacity={0.02}
+                    />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} stroke='var(--border)' />
+                <XAxis
+                  dataKey='month'
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Area
+                  dataKey='planned'
+                  type='monotone'
+                  stroke='var(--muted-foreground)'
+                  fill='transparent'
+                  strokeDasharray='4 4'
+                />
+                <Area
+                  dataKey='actual'
+                  type='monotone'
+                  stroke='var(--primary)'
+                  fill='url(#actual)'
+                  strokeWidth={2}
+                />
+              </AreaChart>
+            </ChartContainer>
+          ) : (
+            <EmptyState message='No spend data available.' />
+          )}
         </Panel>
         <Panel
           title='Needs attention'
           description='Items blocking clean project delivery'
         >
-          <div className='space-y-2'>
-            {attentionItems.map((item) => (
-              <AttentionCard key={item.title} {...item} />
-            ))}
-          </div>
+          {attentionItems.length ? (
+            <div className='space-y-2'>
+              {attentionItems.map((item) => (
+                <AttentionCard key={item.title} {...item} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState message='No attention items.' />
+          )}
         </Panel>
       </div>
       <div className='mt-4 grid gap-4 xl:grid-cols-[1.45fr_0.95fr]'>
@@ -146,28 +155,40 @@ export function TenantDashboard() {
         >
           <ProjectTable compact />
         </Panel>
-        <Panel title='Connected systems' description='Mock integration status'>
-          <div className='divide-y divide-border'>
-            {systems.map((system) => (
-              <SystemRow key={system.name} {...system} />
-            ))}
-          </div>
+        <Panel title='Connected systems' description='Integration status'>
+          {systems.length ? (
+            <div className='divide-y divide-border'>
+              {systems.map((system) => (
+                <SystemRow key={system.name} {...system} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState message='No connected systems.' />
+          )}
         </Panel>
       </div>
       <div className='mt-4 grid gap-4 xl:grid-cols-2'>
         <Panel title='Recent activity'>
-          <div className='divide-y divide-border'>
-            {activity.map((item) => (
-              <ActivityRow key={`${item.actor}-${item.time}`} {...item} />
-            ))}
-          </div>
+          {activity.length ? (
+            <div className='divide-y divide-border'>
+              {activity.map((item) => (
+                <ActivityRow key={`${item.actor}-${item.time}`} {...item} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState message='No recent activity.' />
+          )}
         </Panel>
         <Panel title='Upcoming milestones'>
-          <div className='space-y-2'>
-            {milestones.map((item) => (
-              <MilestoneRow key={item.name} {...item} />
-            ))}
-          </div>
+          {milestones.length ? (
+            <div className='space-y-2'>
+              {milestones.map((item) => (
+                <MilestoneRow key={item.name} {...item} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState message='No upcoming milestones.' />
+          )}
         </Panel>
       </div>
     </>
@@ -191,30 +212,30 @@ export function ProjectsPage() {
       <PageHeader
         eyebrow='Tenant workspace'
         title='Projects'
-        description='A usable project register mockup with local search, status filtering, and delivery signals.'
+        description='Project register with search, status filtering, and delivery signals.'
         action={<NewProjectDialog />}
       />
       <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
         <MetricCard
           label='Open projects'
-          value='6'
-          hint='4 active, 2 setup'
+          value={String(projects.length)}
+          hint='current total'
           tone='good'
         />
         <MetricCard
           label='Average progress'
-          value='45%'
-          hint='weighted by value'
+          value='0%'
+          hint='no project data'
         />
         <MetricCard
           label='At risk / delayed'
-          value='2'
+          value='0'
           hint='need review'
           tone='risk'
         />
         <MetricCard
           label='Budget pressure'
-          value='£84k'
+          value='£0'
           hint='forecast variance'
           tone='risk'
         />
@@ -253,9 +274,13 @@ export function ProjectsPage() {
           </Select>
         </div>
         <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-3'>
-          {filtered.map((project) => (
-            <ProjectCard key={project.code} project={project} />
-          ))}
+          {filtered.length ? (
+            filtered.map((project) => (
+              <ProjectCard key={project.code} project={project} />
+            ))
+          ) : (
+            <EmptyState message='No projects available.' />
+          )}
           <NewProjectDialog
             trigger={
               <button className='flex min-h-52 items-center justify-center rounded-md border border-dashed border-border text-sm text-muted-foreground transition hover:bg-muted/40'>
@@ -269,7 +294,6 @@ export function ProjectsPage() {
   )
 }
 
-// Project card grid — wireframe (decoded design L140-150)
 function ProjectCard({ project }: { project: (typeof projects)[number] }) {
   return (
     <Link
@@ -277,9 +301,6 @@ function ProjectCard({ project }: { project: (typeof projects)[number] }) {
       params={{ code: project.code }}
       className='block rounded-md border border-border bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md'
     >
-      <div className='mb-3 flex h-22 items-center justify-center rounded-sm border border-dashed border-border bg-muted/40 text-[11px] text-muted-foreground'>
-        site image
-      </div>
       <div className='flex items-start justify-between gap-2'>
         <div className='font-medium text-foreground'>{project.name}</div>
         <StatusPill tone={statusTone(project.status)}>
@@ -298,60 +319,6 @@ function ProjectCard({ project }: { project: (typeof projects)[number] }) {
     </Link>
   )
 }
-
-// Tenant Admin — wireframe (decoded design L442-457)
-const orgStats = [
-  {
-    label: 'Members',
-    value: '34',
-    hint: 'active users',
-    tone: 'good' as const,
-  },
-  { label: 'Site teams', value: '7', hint: 'project groups' },
-  {
-    label: 'Pending invites',
-    value: '3',
-    hint: 'awaiting signup',
-    tone: 'risk' as const,
-  },
-  { label: 'Admins', value: '4', hint: 'workspace owners' },
-]
-
-const memberRoles = [
-  { name: 'Admin', desc: 'Full access incl. billing & members', count: '4' },
-  { name: 'Manager', desc: 'Manage projects, BoQ & team', count: '9' },
-  { name: 'Editor', desc: 'Edit BoQ & progress', count: '12' },
-  { name: 'Viewer', desc: 'Read-only access', count: '9' },
-]
-
-const orgSettings = [
-  { label: 'Organisation', value: 'Meridian Construction Ltd' },
-  { label: 'Workspace slug', value: 'meridian' },
-  { label: 'Default currency', value: 'GBP (£)' },
-  { label: 'Time zone', value: 'Europe/London' },
-  { label: 'Two-factor auth', value: 'Required' },
-]
-
-const invitedMembers = [
-  {
-    name: 'Jordan Blake',
-    email: 'jordan@meridian.example',
-    role: 'Editor',
-    projects: 0,
-  },
-  {
-    name: 'Priya Nair',
-    email: 'priya@meridian.example',
-    role: 'Viewer',
-    projects: 0,
-  },
-  {
-    name: 'Tom Reyes',
-    email: 'tom@meridian.example',
-    role: 'Manager',
-    projects: 0,
-  },
-]
 
 const MEMBER_GRID = '1.4fr 1.6fr 1.3fr 90px 90px'
 
@@ -372,7 +339,6 @@ export function TeamPage() {
       projects: m.projects,
       status: 'Active' as const,
     })),
-    ...invitedMembers.map((m) => ({ ...m, status: 'Invited' as const })),
   ]
 
   return (
@@ -383,12 +349,16 @@ export function TeamPage() {
         description='People, roles, access, and workload visibility for the construction tenant.'
       />
       <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
-        {orgStats.map((s) => (
-          <MetricCard key={s.label} {...s} />
-        ))}
+        <MetricCard
+          label='Members'
+          value={String(members.length)}
+          hint='active users'
+        />
+        <MetricCard label='Site teams' value='0' hint='project groups' />
+        <MetricCard label='Pending invites' value='0' hint='awaiting signup' />
+        <MetricCard label='Admins' value='0' hint='workspace owners' />
       </div>
 
-      {/* Members table — wireframe L448-452 */}
       <Panel
         title='Members'
         className='mt-4'
@@ -402,88 +372,63 @@ export function TeamPage() {
         }
       >
         <div className='overflow-x-auto'>
-          <div className='min-w-[680px]'>
-            <div
-              className='grid gap-2.5 border-b border-border pb-2 text-[10px] tracking-wide text-muted-foreground uppercase'
-              style={{ gridTemplateColumns: MEMBER_GRID }}
-            >
-              <div>Name</div>
-              <div>Email</div>
-              <div>Role</div>
-              <div>Projects</div>
-              <div>Status</div>
-            </div>
-            {members.map((m) => (
+          {members.length ? (
+            <div className='min-w-[680px]'>
               <div
-                key={m.email}
-                className='grid items-center gap-2.5 border-b border-border py-2.5 text-xs'
+                className='grid gap-2.5 border-b border-border pb-2 text-[10px] tracking-wide text-muted-foreground uppercase'
                 style={{ gridTemplateColumns: MEMBER_GRID }}
               >
-                <div className='flex items-center gap-2.5'>
-                  <span className='grid size-7 flex-none place-items-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground'>
-                    {memberInitials(m.name)}
-                  </span>
-                  <span className='font-medium text-foreground'>{m.name}</span>
-                </div>
-                <div className='text-[11px] text-muted-foreground'>
-                  {m.email}
-                </div>
-                <div className='flex max-w-44 items-center justify-between rounded-md border border-border px-2.5 py-1.5 text-foreground'>
-                  <span>{m.role}</span>
-                  <ChevronDown className='size-3 text-muted-foreground' />
-                </div>
-                <div className='font-mono text-muted-foreground'>
-                  {m.projects}
-                </div>
-                <div>
-                  <StatusPill tone={m.status === 'Active' ? 'good' : 'muted'}>
-                    {m.status}
-                  </StatusPill>
-                </div>
+                <div>Name</div>
+                <div>Email</div>
+                <div>Role</div>
+                <div>Projects</div>
+                <div>Status</div>
               </div>
-            ))}
-          </div>
+              {members.map((m) => (
+                <div
+                  key={m.email}
+                  className='grid items-center gap-2.5 border-b border-border py-2.5 text-xs'
+                  style={{ gridTemplateColumns: MEMBER_GRID }}
+                >
+                  <div className='flex items-center gap-2.5'>
+                    <span className='grid size-7 flex-none place-items-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground'>
+                      {memberInitials(m.name)}
+                    </span>
+                    <span className='font-medium text-foreground'>
+                      {m.name}
+                    </span>
+                  </div>
+                  <div className='text-[11px] text-muted-foreground'>
+                    {m.email}
+                  </div>
+                  <div className='flex max-w-44 items-center justify-between rounded-md border border-border px-2.5 py-1.5 text-foreground'>
+                    <span>{m.role}</span>
+                    <ChevronDown className='size-3 text-muted-foreground' />
+                  </div>
+                  <div className='font-mono text-muted-foreground'>
+                    {m.projects}
+                  </div>
+                  <div>
+                    <StatusPill tone={m.status === 'Active' ? 'good' : 'muted'}>
+                      {m.status}
+                    </StatusPill>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState message='No members available.' />
+          )}
         </div>
       </Panel>
 
       <div className='mt-4 grid gap-4 xl:grid-cols-2'>
-        {/* Roles & permissions — wireframe L454 */}
         <Panel title='Roles & permissions'>
-          <div className='divide-y divide-border'>
-            {memberRoles.map((r) => (
-              <div
-                key={r.name}
-                className='flex items-center justify-between py-2.5'
-              >
-                <div>
-                  <div className='text-xs font-medium text-foreground'>
-                    {r.name}
-                  </div>
-                  <div className='text-[11px] text-muted-foreground'>
-                    {r.desc}
-                  </div>
-                </div>
-                <div className='font-mono text-[11px] text-muted-foreground'>
-                  {r.count}
-                </div>
-              </div>
-            ))}
-          </div>
+          <EmptyState message='No roles available.' />
         </Panel>
 
-        {/* Organisation settings — wireframe L455 */}
         <Panel title='Organisation settings'>
-          <div className='divide-y divide-border'>
-            {orgSettings.map((o) => (
-              <div
-                key={o.label}
-                className='flex items-center justify-between py-2.5 text-xs'
-              >
-                <span className='text-muted-foreground'>{o.label}</span>
-                <span className='font-medium text-foreground'>{o.value}</span>
-              </div>
-            ))}
-          </div>
+          <EmptyState message='No organisation settings available.' />
         </Panel>
       </div>
     </>
@@ -508,22 +453,17 @@ export function TenantsPage() {
       <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
         <MetricCard
           label='Tenants'
-          value='128'
-          hint='9 this month'
+          value={String(tenants.length)}
+          hint='current total'
           tone='good'
         />
-        <MetricCard label='Active users' value='3,412' hint='last 30 days' />
-        <MetricCard label='Projects' value='1,047' hint='platform-wide' />
-        <MetricCard
-          label='Uptime'
-          value='99.98%'
-          hint='30-day avg'
-          tone='good'
-        />
+        <MetricCard label='Active users' value='0' hint='last 30 days' />
+        <MetricCard label='Projects' value='0' hint='platform-wide' />
+        <MetricCard label='Uptime' value='0%' hint='30-day avg' tone='good' />
       </div>
       <Panel
         title='All tenants'
-        description='Searchable mock tenant table'
+        description='Searchable tenant table'
         className='mt-4'
         action={
           <Button variant='outline' size='sm'>
@@ -540,7 +480,11 @@ export function TenantsPage() {
             placeholder='Search tenants...'
           />
         </div>
-        <TenantTable tenants={filtered} />
+        {filtered.length ? (
+          <TenantTable tenants={filtered} />
+        ) : (
+          <EmptyState message='No tenants available.' />
+        )}
       </Panel>
     </>
   )
@@ -552,37 +496,45 @@ export function SubscriptionsPage() {
       <PageHeader
         eyebrow='Platform admin'
         title='Subscriptions'
-        description='Revenue, renewal, invoice, and plan-mix mockup for the admin side.'
+        description='Revenue, renewal, invoice, and plan mix for the admin side.'
       />
       <div className='grid gap-3 md:grid-cols-3'>
         <MetricCard
           label='Monthly recurring'
-          value='£62.3k'
+          value='£0'
           hint='current run rate'
           tone='good'
         />
         <MetricCard
           label='Expansion revenue'
-          value='£8.7k'
+          value='£0'
           hint='this quarter'
           tone='good'
         />
-        <MetricCard label='Trial conversions' value='41%' hint='last 90 days' />
+        <MetricCard label='Trial conversions' value='0%' hint='last 90 days' />
       </div>
       <div className='mt-4 grid gap-4 xl:grid-cols-[1fr_1fr]'>
-        <Panel title='Plan mix' description='Mock subscription tiers'>
-          <div className='space-y-3'>
-            {subscriptions.map((plan) => (
-              <PlanRow key={plan.plan} {...plan} />
-            ))}
-          </div>
+        <Panel title='Plan mix' description='Subscription tiers'>
+          {subscriptions.length ? (
+            <div className='space-y-3'>
+              {subscriptions.map((plan) => (
+                <PlanRow key={plan.plan} {...plan} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState message='No subscriptions available.' />
+          )}
         </Panel>
         <Panel title='Invoices requiring attention'>
-          <div className='divide-y divide-border'>
-            {invoices.map((invoice) => (
-              <InvoiceRow key={invoice.tenant} {...invoice} />
-            ))}
-          </div>
+          {invoices.length ? (
+            <div className='divide-y divide-border'>
+              {invoices.map((invoice) => (
+                <InvoiceRow key={invoice.tenant} {...invoice} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState message='No invoices available.' />
+          )}
         </Panel>
       </div>
     </>
@@ -610,10 +562,9 @@ function NewProjectDialog({ trigger }: { trigger?: React.ReactNode }) {
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create project mockup</DialogTitle>
+          <DialogTitle>Create project</DialogTitle>
           <DialogDescription>
-            This is frontend-only. The form demonstrates the intended workflow
-            without saving data.
+            Enter project details to start setup.
           </DialogDescription>
         </DialogHeader>
         <div className='grid gap-3 py-2'>
@@ -638,9 +589,7 @@ function InviteDialog() {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Invite member</DialogTitle>
-          <DialogDescription>
-            Mock invite flow for team management.
-          </DialogDescription>
+          <DialogDescription>Invite a team member.</DialogDescription>
         </DialogHeader>
         <div className='grid gap-3 py-2'>
           <Input placeholder='name@company.com' />
@@ -654,7 +603,7 @@ function InviteDialog() {
               <SelectItem value='viewer'>Viewer</SelectItem>
             </SelectContent>
           </Select>
-          <Button>Send mock invite</Button>
+          <Button>Send invite</Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -673,7 +622,7 @@ function AddTenantDialog() {
         <DialogHeader>
           <DialogTitle>Add tenant</DialogTitle>
           <DialogDescription>
-            Mock tenant provisioning flow for the platform admin.
+            Enter tenant details to start provisioning.
           </DialogDescription>
         </DialogHeader>
         <div className='grid gap-3 py-2'>
@@ -689,7 +638,7 @@ function AddTenantDialog() {
               <SelectItem value='enterprise'>Enterprise</SelectItem>
             </SelectContent>
           </Select>
-          <Button>Create tenant preview</Button>
+          <Button>Create tenant</Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -703,6 +652,8 @@ function ProjectTable({
   compact?: boolean
   projects?: typeof projects
 }) {
+  if (!rows.length) return <EmptyState message='No projects available.' />
+
   return (
     <div className='overflow-x-auto'>
       <table className='w-full min-w-[760px] text-left text-xs'>

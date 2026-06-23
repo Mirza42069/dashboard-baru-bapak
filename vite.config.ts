@@ -21,6 +21,12 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  server: {
+    // Dev: proxy API calls to the backend so they're same-origin (cookies work).
+    proxy: {
+      '/api': 'http://localhost:3001',
+    },
+  },
   test: {
     silent: 'passed-only',
     unstubEnvs: true,

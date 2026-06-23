@@ -17,7 +17,6 @@ import {
 import { cn } from '@/lib/utils'
 import { useTheme } from '@/context/theme-provider'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
@@ -87,7 +86,7 @@ export function BuildFlowShell() {
               className='hidden h-9 gap-2 rounded-md border-border bg-card px-3 font-normal shadow-xs lg:flex'
             >
               <span className='size-4 rounded bg-primary/20 ring-1 ring-primary/25' />
-              Meridian Construction Ltd
+              Current workspace
               <ChevronDown className='size-3' />
             </Button>
           )}
@@ -169,12 +168,6 @@ function BrandBlock({ compact = false }: { compact?: boolean }) {
       <div className='font-semibold tracking-tight text-foreground'>
         BUILDFLOW
       </div>
-      <Badge
-        variant='outline'
-        className='rounded-md border-border bg-card/70 px-1.5 text-[10px] font-normal tracking-[0.16em] text-muted-foreground'
-      >
-        MOCKUP
-      </Badge>
     </div>
   )
 }
@@ -367,12 +360,7 @@ export function StatusPill({
 }
 
 export function FooterNote() {
-  return (
-    <div className='mt-8 border-t border-dashed border-border pt-4 text-xs text-muted-foreground'>
-      Frontend mockup only <span className='mx-3'>·</span> No backend, no API
-      calls <span className='mx-3'>·</span> Vercel SPA-ready
-    </div>
-  )
+  return null
 }
 
 export function EmptyPage({
@@ -385,11 +373,19 @@ export function EmptyPage({
   return (
     <>
       <PageHeader eyebrow='BuildFlow' title={title} description={description} />
-      <Panel title='Coming up next'>
+      <Panel title='No content available'>
         <div className='rounded-sm border border-dashed border-border bg-muted/40 p-10 text-center text-muted-foreground'>
-          This area is reserved for the next round of mockups.
+          There is no data to display yet.
         </div>
       </Panel>
     </>
+  )
+}
+
+export function EmptyState({ message = 'No data available.' }: { message?: string }) {
+  return (
+    <div className='rounded-sm border border-dashed border-border bg-muted/40 p-8 text-center text-sm text-muted-foreground'>
+      {message}
+    </div>
   )
 }
