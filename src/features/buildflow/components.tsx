@@ -1,25 +1,32 @@
 import { Link, Outlet, useLocation } from '@tanstack/react-router'
 import {
+  Bell,
   ChevronDown,
   CircleHelp,
   Gauge,
   Grid2X2,
   Layers3,
+  Menu,
+  Moon,
   Search,
   Settings,
   SquareMenu,
+  Sun,
   Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useTheme } from '@/context/theme-provider'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 
 type MetricCardProps = {
   label: string
   value: string
   hint: string
+  tone?: 'good' | 'risk' | 'neutral'
 }
 
 const workspaceLinks = [
@@ -38,79 +45,136 @@ export function BuildFlowShell() {
   const isPlatform = ['/tenants', '/subscriptions'].some((path) =>
     location.pathname.startsWith(path)
   )
+  const links = isPlatform ? platformLinks : workspaceLinks
 
   return (
-    <div className='min-h-svh bg-[#f3f3f3] text-[13px] text-slate-800'>
-      <header className='flex h-12 items-center border-b border-[#d4d4d4] bg-[#eeeeee] px-3'>
-        <div className='flex min-w-52 items-center gap-2'>
-          <Button
-            variant='outline'
-            size='icon'
-            className='size-7 rounded-[5px] bg-white'
-          >
-            <Grid2X2 className='size-3.5' />
-          </Button>
-          <div className='font-semibold tracking-tight'>BUILDFLOW</div>
-          <Badge
-            variant='outline'
-            className='h-5 rounded-[3px] bg-white/50 px-1.5 text-[10px] font-normal tracking-[0.18em] text-slate-400'
-          >
-            WIREFRAME
-          </Badge>
+    <div className='min-h-svh bg-background text-[13px] text-foreground antialiased'>
+      <header className='sticky top-0 z-30 flex h-14 items-center border-b border-border bg-background/95 px-3 backdrop-blur md:px-4'>
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button
+              variant='outline'
+              size='icon'
+              className='me-2 size-8 rounded-md bg-card md:hidden'
+            >
+              <Menu className='size-4' />
+            </Button>
+          </SheetTrigger>
+          <SheetContent side='left' className='w-72 bg-background p-0'>
+            <BrandBlock />
+            <div className='p-3'>
+              <NavSection
+                title={isPlatform ? 'Platform' : 'Workspace'}
+                items={links}
+              />
+            </div>
+          </SheetContent>
+        </Sheet>
+
+        <div className='hidden min-w-56 md:block'>
+          <BrandBlock compact />
         </div>
 
-        <div className='flex rounded-[5px] border border-[#d0d0d0] bg-[#e2e2e2] p-0.5'>
+        <div className='flex rounded-md border border-border bg-muted p-1 shadow-inner'>
           <ModeLink active={!isPlatform} to='/' label='Tenant workspace' />
           <ModeLink active={isPlatform} to='/tenants' label='Platform admin' />
         </div>
 
-        <div className='ms-auto flex items-center gap-3'>
-          {!isPlatform && (
-            <span className='hidden text-slate-400 md:inline'>Org:</span>
-          )}
+        <div className='ms-auto flex items-center gap-2 md:gap-3'>
           {!isPlatform && (
             <Button
               variant='outline'
-              className='hidden h-8 gap-2 rounded-[5px] bg-white px-3 font-normal md:flex'
+              className='hidden h-9 gap-2 rounded-md border-border bg-card px-3 font-normal shadow-xs lg:flex'
             >
-              <span className='size-4 rounded bg-slate-200' />
+              <span className='size-4 rounded bg-primary/20 ring-1 ring-primary/25' />
               Meridian Construction Ltd
               <ChevronDown className='size-3' />
             </Button>
           )}
           <div className='relative hidden sm:block'>
-            <Search className='absolute start-3 top-1/2 size-3 -translate-y-1/2 text-slate-400' />
+            <Search className='absolute start-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground' />
             <Input
-              className='h-8 w-48 rounded-[5px] bg-white ps-8 text-xs'
-              placeholder='Search...'
+              className='h-9 w-52 rounded-sm border-border bg-card ps-9 text-xs shadow-xs xl:w-64'
+              placeholder='Search projects, BoQ, people...'
             />
           </div>
-          <Avatar className='size-8 bg-slate-300'>
-            <AvatarFallback className='text-xs'>CM</AvatarFallback>
+          <Button
+            variant='outline'
+            size='icon'
+            className='size-9 rounded-md border-border bg-card shadow-xs'
+          >
+            <Bell className='size-4' />
+          </Button>
+          <TopbarThemeButton />
+          <Avatar className='size-9 border border-border bg-muted'>
+            <AvatarFallback className='text-xs font-medium'>CM</AvatarFallback>
           </Avatar>
         </div>
       </header>
 
-      <div className='grid min-h-[calc(100svh-3rem)] grid-cols-1 md:grid-cols-[228px_1fr]'>
-        <aside className='flex border-r border-[#d4d4d4] bg-[#ededed] md:min-h-[calc(100svh-3rem)] md:flex-col'>
-          <nav className='flex flex-1 gap-1 overflow-x-auto p-3 md:block md:space-y-7'>
+      <div className='grid min-h-[calc(100svh-3.5rem)] grid-cols-1 gap-4 md:grid-cols-[244px_1fr] md:p-4 md:pe-0'>
+        <aside className='sticky top-[4.5rem] hidden h-[calc(100svh-5.5rem)] rounded-lg border border-sidebar-border bg-sidebar shadow-sm md:flex md:flex-col'>
+          <nav className='flex-1 p-3'>
             <NavSection
               title={isPlatform ? 'Platform' : 'Workspace'}
-              items={isPlatform ? platformLinks : workspaceLinks}
+              items={links}
             />
           </nav>
-          <div className='mt-auto hidden border-t border-[#d4d4d4] p-3 md:block'>
+          <div className='border-t border-sidebar-border p-3'>
             <SideUtility icon={Settings} label='Settings' />
             <SideUtility icon={CircleHelp} label='Help & support' />
           </div>
         </aside>
-        <main className='overflow-x-hidden px-4 py-6 md:px-6'>
-          <div className='max-w-7xl'>
+        <main className='overflow-x-hidden px-4 py-5 md:px-2 md:pe-6 md:pt-1 lg:pe-8'>
+          <div className='mx-auto max-w-7xl'>
             <Outlet />
             <FooterNote />
           </div>
         </main>
       </div>
+    </div>
+  )
+}
+
+function TopbarThemeButton() {
+  const { resolvedTheme, setTheme } = useTheme()
+  const isDark = resolvedTheme === 'dark'
+
+  return (
+    <Button
+      type='button'
+      variant='outline'
+      size='icon'
+      className='size-9 rounded-md border-border bg-card shadow-xs'
+      aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+      title={isDark ? 'Light mode' : 'Dark mode'}
+      onClick={() => setTheme(isDark ? 'light' : 'dark')}
+    >
+      {isDark ? <Sun className='size-4' /> : <Moon className='size-4' />}
+    </Button>
+  )
+}
+
+function BrandBlock({ compact = false }: { compact?: boolean }) {
+  return (
+    <div
+      className={cn(
+        'flex items-center gap-2',
+        compact ? '' : 'border-b border-border p-4'
+      )}
+    >
+      <div className='grid size-8 place-items-center rounded-sm border border-border bg-card shadow-xs'>
+        <Grid2X2 className='size-4 text-foreground' />
+      </div>
+      <div className='font-semibold tracking-tight text-foreground'>
+        BUILDFLOW
+      </div>
+      <Badge
+        variant='outline'
+        className='rounded-md border-border bg-card/70 px-1.5 text-[10px] font-normal tracking-[0.16em] text-muted-foreground'
+      >
+        MOCKUP
+      </Badge>
     </div>
   )
 }
@@ -128,8 +192,8 @@ function ModeLink({
     <Link
       to={to}
       className={cn(
-        'rounded-[5px] px-4 py-1.5 text-xs text-slate-500',
-        active && 'bg-white text-slate-950 shadow-xs'
+        'rounded-sm px-3 py-1.5 text-xs text-muted-foreground transition hover:text-foreground md:px-4',
+        active && 'bg-card text-foreground shadow-sm'
       )}
     >
       {label}
@@ -145,24 +209,23 @@ function NavSection({
   items: typeof workspaceLinks
 }) {
   return (
-    <div className='min-w-max md:min-w-0'>
-      <div className='mb-2 hidden px-2 text-[10px] tracking-[0.18em] text-slate-400 uppercase md:block'>
+    <div>
+      <div className='mb-2 px-2 text-[10px] tracking-[0.18em] text-muted-foreground uppercase'>
         {title}
       </div>
-      <div className='flex gap-1 md:block md:space-y-1'>
+      <div className='space-y-1'>
         {items.map((item) => (
           <Link
             key={item.to}
             to={item.to}
             activeOptions={{ exact: item.to === '/' }}
             activeProps={{
-              className:
-                'bg-[#dedede] text-slate-950 shadow-[inset_3px_0_0_#777]',
+              className: 'bg-card text-foreground shadow-sm ring-1 ring-border',
             }}
-            className='flex items-center gap-3 rounded-[6px] px-3 py-2 text-slate-600 hover:bg-[#e3e3e3]'
+            className='flex items-center gap-3 rounded-md px-3 py-2.5 text-sidebar-foreground/70 transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
           >
-            <item.icon className='size-3.5' />
-            {item.label}
+            <item.icon className='size-4' />
+            <span>{item.label}</span>
           </Link>
         ))}
       </div>
@@ -178,8 +241,8 @@ function SideUtility({
   label: string
 }) {
   return (
-    <button className='flex w-full items-center gap-3 rounded-[6px] px-2 py-2 text-left text-slate-500 hover:bg-[#e3e3e3]'>
-      <Icon className='size-3.5' />
+    <button className='flex w-full items-center gap-3 rounded-sm px-3 py-2.5 text-left text-sidebar-foreground/70 transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'>
+      <Icon className='size-4' />
       {label}
     </button>
   )
@@ -188,48 +251,72 @@ function SideUtility({
 export function PageHeader({
   eyebrow,
   title,
+  description,
   action,
 }: {
   eyebrow: string
   title: string
+  description?: string
   action?: React.ReactNode
 }) {
   return (
-    <div className='mb-5 flex flex-wrap items-end justify-between gap-3'>
+    <div className='mb-5 flex flex-wrap items-end justify-between gap-4'>
       <div>
-        <div className='mb-2 text-[11px] tracking-[0.18em] text-slate-400 uppercase'>
+        <div className='mb-2 text-[11px] tracking-[0.18em] text-muted-foreground uppercase'>
           {eyebrow}
         </div>
-        <h1 className='text-2xl font-semibold tracking-tight text-slate-950'>
+        <h1 className='text-2xl font-semibold tracking-tight text-foreground md:text-3xl'>
           {title}
         </h1>
+        {description && (
+          <p className='mt-1 max-w-2xl text-sm text-muted-foreground'>
+            {description}
+          </p>
+        )}
       </div>
       {action}
     </div>
   )
 }
 
-export function MetricCard({ label, value, hint }: MetricCardProps) {
+export function MetricCard({
+  label,
+  value,
+  hint,
+  tone = 'neutral',
+}: MetricCardProps) {
   return (
-    <div className='rounded-[6px] border border-[#d8d8d8] bg-white p-4 shadow-[0_1px_0_rgba(0,0,0,0.02)]'>
-      <div className='text-[10px] tracking-[0.18em] text-slate-400 uppercase'>
-        {label}
+    <div className='group rounded-md border border-border bg-card p-4 text-card-foreground shadow-sm transition hover:-translate-y-0.5 hover:shadow-md'>
+      <div className='flex items-center justify-between gap-3'>
+        <div className='text-[10px] tracking-[0.16em] text-muted-foreground uppercase'>
+          {label}
+        </div>
+        <span
+          className={cn(
+            'size-2 rounded-full',
+            tone === 'good' && 'bg-emerald-500',
+            tone === 'risk' && 'bg-amber-500',
+            tone === 'neutral' && 'bg-muted-foreground/35'
+          )}
+        />
       </div>
-      <div className='mt-2 text-2xl font-semibold tracking-tight text-slate-950'>
+      <div className='mt-3 text-2xl font-semibold tracking-tight text-card-foreground'>
         {value}
       </div>
-      <div className='mt-1 text-xs text-slate-500'>{hint}</div>
+      <div className='mt-1 text-xs text-muted-foreground'>{hint}</div>
     </div>
   )
 }
 
 export function Panel({
   title,
+  description,
   action,
   children,
   className,
 }: {
   title: string
+  description?: string
   action?: React.ReactNode
   children: React.ReactNode
   className?: string
@@ -237,12 +324,17 @@ export function Panel({
   return (
     <section
       className={cn(
-        'rounded-[6px] border border-[#d8d8d8] bg-white p-4',
+        'rounded-lg border border-border bg-card p-4 text-card-foreground shadow-sm',
         className
       )}
     >
-      <div className='mb-3 flex items-center justify-between'>
-        <h2 className='font-medium text-slate-950'>{title}</h2>
+      <div className='mb-4 flex items-start justify-between gap-3'>
+        <div>
+          <h2 className='font-semibold text-card-foreground'>{title}</h2>
+          {description && (
+            <p className='mt-1 text-xs text-muted-foreground'>{description}</p>
+          )}
+        </div>
         {action}
       </div>
       {children}
@@ -252,16 +344,21 @@ export function Panel({
 
 export function StatusPill({
   children,
-  muted,
+  tone = 'neutral',
 }: {
   children: React.ReactNode
-  muted?: boolean
+  tone?: 'good' | 'risk' | 'danger' | 'neutral' | 'muted'
 }) {
   return (
     <span
       className={cn(
-        'inline-flex rounded-full bg-[#dedede] px-2 py-1 text-[11px] font-medium text-slate-700',
-        muted && 'border border-dashed border-[#c9c9c9] bg-white text-slate-500'
+        'inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium',
+        tone === 'good' && 'border-emerald-200 bg-emerald-50 text-emerald-700',
+        tone === 'risk' && 'border-amber-200 bg-amber-50 text-amber-700',
+        tone === 'danger' && 'border-rose-200 bg-rose-50 text-rose-700',
+        tone === 'neutral' && 'border-border bg-muted text-muted-foreground',
+        tone === 'muted' &&
+          'border-dashed border-border bg-card text-muted-foreground'
       )}
     >
       {children}
@@ -269,11 +366,11 @@ export function StatusPill({
   )
 }
 
-function FooterNote() {
+export function FooterNote() {
   return (
-    <div className='mt-6 border-t border-dashed border-[#d4d4d4] pt-4 text-xs text-slate-400'>
-      Low-fi wireframe <span className='mx-3'>·</span> Open a project → Bill of
-      Quantities → Revise to unlock qty/rate, or edit % directly
+    <div className='mt-8 border-t border-dashed border-border pt-4 text-xs text-muted-foreground'>
+      Frontend mockup only <span className='mx-3'>·</span> No backend, no API
+      calls <span className='mx-3'>·</span> Vercel SPA-ready
     </div>
   )
 }
@@ -287,10 +384,10 @@ export function EmptyPage({
 }) {
   return (
     <>
-      <PageHeader eyebrow='BuildFlow' title={title} />
-      <Panel title={title}>
-        <div className='rounded-[6px] border border-dashed border-[#d4d4d4] bg-[#fafafa] p-8 text-center text-slate-500'>
-          {description}
+      <PageHeader eyebrow='BuildFlow' title={title} description={description} />
+      <Panel title='Coming up next'>
+        <div className='rounded-sm border border-dashed border-border bg-muted/40 p-10 text-center text-muted-foreground'>
+          This area is reserved for the next round of mockups.
         </div>
       </Panel>
     </>
