@@ -299,42 +299,193 @@ function ProjectCard({ project }: { project: (typeof projects)[number] }) {
   )
 }
 
+// Tenant Admin — wireframe (decoded design L442-457)
+const orgStats = [
+  {
+    label: 'Members',
+    value: '34',
+    hint: 'active users',
+    tone: 'good' as const,
+  },
+  { label: 'Site teams', value: '7', hint: 'project groups' },
+  {
+    label: 'Pending invites',
+    value: '3',
+    hint: 'awaiting signup',
+    tone: 'risk' as const,
+  },
+  { label: 'Admins', value: '4', hint: 'workspace owners' },
+]
+
+const memberRoles = [
+  { name: 'Admin', desc: 'Full access incl. billing & members', count: '4' },
+  { name: 'Manager', desc: 'Manage projects, BoQ & team', count: '9' },
+  { name: 'Editor', desc: 'Edit BoQ & progress', count: '12' },
+  { name: 'Viewer', desc: 'Read-only access', count: '9' },
+]
+
+const orgSettings = [
+  { label: 'Organisation', value: 'Meridian Construction Ltd' },
+  { label: 'Workspace slug', value: 'meridian' },
+  { label: 'Default currency', value: 'GBP (£)' },
+  { label: 'Time zone', value: 'Europe/London' },
+  { label: 'Two-factor auth', value: 'Required' },
+]
+
+const invitedMembers = [
+  {
+    name: 'Jordan Blake',
+    email: 'jordan@meridian.example',
+    role: 'Editor',
+    projects: 0,
+  },
+  {
+    name: 'Priya Nair',
+    email: 'priya@meridian.example',
+    role: 'Viewer',
+    projects: 0,
+  },
+  {
+    name: 'Tom Reyes',
+    email: 'tom@meridian.example',
+    role: 'Manager',
+    projects: 0,
+  },
+]
+
+const MEMBER_GRID = '1.4fr 1.6fr 1.3fr 90px 90px'
+
+const memberInitials = (name: string) =>
+  name
+    .split(' ')
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
+
 export function TeamPage() {
+  const members = [
+    ...team.map((m) => ({
+      name: m.name,
+      email: m.email,
+      role: m.role,
+      projects: m.projects,
+      status: 'Active' as const,
+    })),
+    ...invitedMembers.map((m) => ({ ...m, status: 'Invited' as const })),
+  ]
+
   return (
     <>
       <PageHeader
-        eyebrow='Tenant workspace'
+        eyebrow='Tenant admin'
         title='Team & organisation'
         description='People, roles, access, and workload visibility for the construction tenant.'
-        action={<InviteDialog />}
       />
       <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
-        <MetricCard
-          label='Members'
-          value='34'
-          hint='active users'
-          tone='good'
-        />
-        <MetricCard label='Site teams' value='7' hint='project groups' />
-        <MetricCard
-          label='Pending invites'
-          value='3'
-          hint='awaiting signup'
-          tone='risk'
-        />
-        <MetricCard label='Admins' value='4' hint='workspace owners' />
+        {orgStats.map((s) => (
+          <MetricCard key={s.label} {...s} />
+        ))}
       </div>
+
+      {/* Members table — wireframe L448-452 */}
       <Panel
-        title='Core delivery team'
-        description='Mock permissions and utilization'
+        title='Members'
         className='mt-4'
+        action={
+          <div className='flex gap-2'>
+            <Button variant='outline' size='sm' className='rounded-md text-xs'>
+              Export
+            </Button>
+            <InviteDialog />
+          </div>
+        }
       >
-        <div className='divide-y divide-border'>
-          {team.map((member) => (
-            <TeamRow key={member.email} {...member} />
-          ))}
+        <div className='overflow-x-auto'>
+          <div className='min-w-[680px]'>
+            <div
+              className='grid gap-2.5 border-b border-border pb-2 text-[10px] tracking-wide text-muted-foreground uppercase'
+              style={{ gridTemplateColumns: MEMBER_GRID }}
+            >
+              <div>Name</div>
+              <div>Email</div>
+              <div>Role</div>
+              <div>Projects</div>
+              <div>Status</div>
+            </div>
+            {members.map((m) => (
+              <div
+                key={m.email}
+                className='grid items-center gap-2.5 border-b border-border py-2.5 text-xs'
+                style={{ gridTemplateColumns: MEMBER_GRID }}
+              >
+                <div className='flex items-center gap-2.5'>
+                  <span className='grid size-7 flex-none place-items-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground'>
+                    {memberInitials(m.name)}
+                  </span>
+                  <span className='font-medium text-foreground'>{m.name}</span>
+                </div>
+                <div className='text-[11px] text-muted-foreground'>
+                  {m.email}
+                </div>
+                <div className='flex max-w-44 items-center justify-between rounded-md border border-border px-2.5 py-1.5 text-foreground'>
+                  <span>{m.role}</span>
+                  <ChevronDown className='size-3 text-muted-foreground' />
+                </div>
+                <div className='font-mono text-muted-foreground'>
+                  {m.projects}
+                </div>
+                <div>
+                  <StatusPill tone={m.status === 'Active' ? 'good' : 'muted'}>
+                    {m.status}
+                  </StatusPill>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </Panel>
+
+      <div className='mt-4 grid gap-4 xl:grid-cols-2'>
+        {/* Roles & permissions — wireframe L454 */}
+        <Panel title='Roles & permissions'>
+          <div className='divide-y divide-border'>
+            {memberRoles.map((r) => (
+              <div
+                key={r.name}
+                className='flex items-center justify-between py-2.5'
+              >
+                <div>
+                  <div className='text-xs font-medium text-foreground'>
+                    {r.name}
+                  </div>
+                  <div className='text-[11px] text-muted-foreground'>
+                    {r.desc}
+                  </div>
+                </div>
+                <div className='font-mono text-[11px] text-muted-foreground'>
+                  {r.count}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        {/* Organisation settings — wireframe L455 */}
+        <Panel title='Organisation settings'>
+          <div className='divide-y divide-border'>
+            {orgSettings.map((o) => (
+              <div
+                key={o.label}
+                className='flex items-center justify-between py-2.5 text-xs'
+              >
+                <span className='text-muted-foreground'>{o.label}</span>
+                <span className='font-medium text-foreground'>{o.value}</span>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
     </>
   )
 }
@@ -794,38 +945,6 @@ function MilestoneRow({
       </div>
       <StatusPill tone={status === 'Ready' ? 'good' : 'risk'}>
         {status}
-      </StatusPill>
-    </div>
-  )
-}
-function TeamRow({
-  name,
-  role,
-  email,
-  projects,
-  utilization,
-  access,
-}: {
-  name: string
-  role: string
-  email: string
-  projects: number
-  utilization: number
-  access: string
-}) {
-  return (
-    <div className='grid gap-3 py-3 md:grid-cols-[1fr_180px_180px_110px] md:items-center'>
-      <div>
-        <div className='font-medium text-foreground'>{name}</div>
-        <div className='text-xs text-muted-foreground'>{email}</div>
-      </div>
-      <div className='text-muted-foreground'>{role}</div>
-      <div className='flex items-center gap-2'>
-        <Progress value={utilization} className='h-2 w-24 bg-muted' />
-        {utilization}%
-      </div>
-      <StatusPill>
-        {access} · {projects}
       </StatusPill>
     </div>
   )
