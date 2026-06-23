@@ -27,8 +27,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { MetricCard, Panel, StatusPill } from './components'
-import { projects, systems } from './data'
 import {
   boqSeedLeaves,
   computeTotals,
@@ -36,6 +34,8 @@ import {
   leafStatus,
   type BoqLeaf,
 } from './boq'
+import { MetricCard, Panel, StatusPill } from './components'
+import { projects, systems } from './data'
 
 // Exact BoQ grid columns from wireframe (decoded design L265).
 const GRID = '74px 1.9fr 52px 100px 96px 104px 168px 104px'
@@ -73,18 +73,68 @@ const gantt = [
 ]
 
 const documents = [
-  { name: 'tender_BoQ_rev2.xlsx', ext: 'XLS', type: 'Bill of quantities', size: '186 KB', updated: '2 days ago' },
-  { name: 'GA_drawings_set_C.pdf', ext: 'PDF', type: 'Drawings', size: '12.4 MB', updated: '5 days ago' },
-  { name: 'programme_v4.mpp', ext: 'MPP', type: 'Programme', size: '904 KB', updated: '1 week ago' },
-  { name: 'site_diary_wk12.pdf', ext: 'PDF', type: 'Site record', size: '2.1 MB', updated: '1 week ago' },
-  { name: 'valuation_05.pdf', ext: 'PDF', type: 'Valuation', size: '430 KB', updated: '2 weeks ago' },
+  {
+    name: 'tender_BoQ_rev2.xlsx',
+    ext: 'XLS',
+    type: 'Bill of quantities',
+    size: '186 KB',
+    updated: '2 days ago',
+  },
+  {
+    name: 'GA_drawings_set_C.pdf',
+    ext: 'PDF',
+    type: 'Drawings',
+    size: '12.4 MB',
+    updated: '5 days ago',
+  },
+  {
+    name: 'programme_v4.mpp',
+    ext: 'MPP',
+    type: 'Programme',
+    size: '904 KB',
+    updated: '1 week ago',
+  },
+  {
+    name: 'site_diary_wk12.pdf',
+    ext: 'PDF',
+    type: 'Site record',
+    size: '2.1 MB',
+    updated: '1 week ago',
+  },
+  {
+    name: 'valuation_05.pdf',
+    ext: 'PDF',
+    type: 'Valuation',
+    size: '430 KB',
+    updated: '2 weeks ago',
+  },
 ]
 
 const projectTeam = [
-  { initials: 'AO', name: 'A. Okafor', email: 'a.okafor@meridian.co', role: 'Project manager' },
-  { initials: 'LM', name: 'L. Marsh', email: 'l.marsh@meridian.co', role: 'Quantity surveyor' },
-  { initials: 'DS', name: 'D. Singh', email: 'd.singh@meridian.co', role: 'Site manager' },
-  { initials: 'RA', name: 'R. Adeyemi', email: 'r.adeyemi@meridian.co', role: 'Engineer' },
+  {
+    initials: 'AO',
+    name: 'A. Okafor',
+    email: 'a.okafor@meridian.co',
+    role: 'Project manager',
+  },
+  {
+    initials: 'LM',
+    name: 'L. Marsh',
+    email: 'l.marsh@meridian.co',
+    role: 'Quantity surveyor',
+  },
+  {
+    initials: 'DS',
+    name: 'D. Singh',
+    email: 'd.singh@meridian.co',
+    role: 'Site manager',
+  },
+  {
+    initials: 'RA',
+    name: 'R. Adeyemi',
+    email: 'r.adeyemi@meridian.co',
+    role: 'Engineer',
+  },
 ]
 
 type Revision = {
@@ -97,8 +147,22 @@ type Revision = {
 }
 
 const seedRevisions: Revision[] = [
-  { rev: '2', status: 'Active', tone: 'good', note: 'Re-measure of curtain walling after design freeze', date: '14 Mar', by: 'A. Okafor' },
-  { rev: '1', status: 'Superseded', tone: 'muted', note: 'Initial tender BoQ import', date: '12 Jan', by: 'L. Marsh' },
+  {
+    rev: '2',
+    status: 'Active',
+    tone: 'good',
+    note: 'Re-measure of curtain walling after design freeze',
+    date: '14 Mar',
+    by: 'A. Okafor',
+  },
+  {
+    rev: '1',
+    status: 'Superseded',
+    tone: 'muted',
+    note: 'Initial tender BoQ import',
+    date: '12 Jan',
+    by: 'L. Marsh',
+  },
 ]
 
 const projectTabs = [
@@ -124,8 +188,7 @@ export function ProjectDetailPage() {
   const project = projects.find((p) => p.code === code) ?? projects[0]
   const [tab, setTab] = useState('boq')
 
-  const tabLabel =
-    projectTabs.find((t) => t.value === tab)?.label ?? 'Overview'
+  const tabLabel = projectTabs.find((t) => t.value === tab)?.label ?? 'Overview'
 
   return (
     <div>
@@ -207,10 +270,29 @@ function OverviewTab({ project }: { project: (typeof projects)[number] }) {
   return (
     <div>
       <div className='mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
-        <MetricCard label='Progress' value={`${project.progress}%`} hint='earned value basis' tone='good' />
-        <MetricCard label='Contract value' value={project.value} hint='current revision' />
-        <MetricCard label='Budget used' value={`${project.budgetUsed}%`} hint='of contract value' tone={project.budgetUsed > 70 ? 'risk' : 'neutral'} />
-        <MetricCard label='Risk' value={project.risk} hint='QS assessment' tone={project.risk === 'High' ? 'risk' : 'neutral'} />
+        <MetricCard
+          label='Progress'
+          value={`${project.progress}%`}
+          hint='earned value basis'
+          tone='good'
+        />
+        <MetricCard
+          label='Contract value'
+          value={project.value}
+          hint='current revision'
+        />
+        <MetricCard
+          label='Budget used'
+          value={`${project.budgetUsed}%`}
+          hint='of contract value'
+          tone={project.budgetUsed > 70 ? 'risk' : 'neutral'}
+        />
+        <MetricCard
+          label='Risk'
+          value={project.risk}
+          hint='QS assessment'
+          tone={project.risk === 'High' ? 'risk' : 'neutral'}
+        />
       </div>
       <div className='grid gap-4 xl:grid-cols-2'>
         <Panel title='Project details'>
@@ -258,7 +340,12 @@ function BoqTab({ projectName }: { projectName: string }) {
   const [revisions, setRevisions] = useState<Revision[]>(seedRevisions)
 
   if (stage === 'empty')
-    return <BoqEmpty onImport={() => setStage('import')} onScratch={() => setStage('data')} />
+    return (
+      <BoqEmpty
+        onImport={() => setStage('import')}
+        onScratch={() => setStage('data')}
+      />
+    )
   if (stage === 'import')
     return (
       <BoqImport
@@ -272,8 +359,19 @@ function BoqTab({ projectName }: { projectName: string }) {
 
   const saveRevision = () => {
     setRevisions((prev) => [
-      { rev: nextRev, status: 'Active', tone: 'good', note: 'Quantity & rate revision', date: 'Today', by: 'A. Okafor' },
-      ...prev.map((r) => ({ ...r, status: r.status === 'Active' ? 'Superseded' : r.status, tone: 'muted' as const })),
+      {
+        rev: nextRev,
+        status: 'Active',
+        tone: 'good',
+        note: 'Quantity & rate revision',
+        date: 'Today',
+        by: 'A. Okafor',
+      },
+      ...prev.map((r) => ({
+        ...r,
+        status: r.status === 'Active' ? 'Superseded' : r.status,
+        tone: 'muted' as const,
+      })),
     ])
     setMode('active')
   }
@@ -298,7 +396,11 @@ function BoqTab({ projectName }: { projectName: string }) {
           </div>
           <div className='flex gap-2'>
             <ExportDialog />
-            <Button size='sm' className='rounded-md text-xs' onClick={() => setMode('draft')}>
+            <Button
+              size='sm'
+              className='rounded-md text-xs'
+              onClick={() => setMode('draft')}
+            >
               <Pencil className='size-3.5' /> Revise BoQ
             </Button>
           </div>
@@ -314,10 +416,19 @@ function BoqTab({ projectName }: { projectName: string }) {
             </span>
           </div>
           <div className='flex gap-2'>
-            <Button variant='outline' size='sm' className='rounded-md text-xs' onClick={discardDraft}>
+            <Button
+              variant='outline'
+              size='sm'
+              className='rounded-md text-xs'
+              onClick={discardDraft}
+            >
               Discard
             </Button>
-            <Button size='sm' className='rounded-md text-xs' onClick={saveRevision}>
+            <Button
+              size='sm'
+              className='rounded-md text-xs'
+              onClick={saveRevision}
+            >
               Save as Rev {nextRev}
             </Button>
           </div>
@@ -357,7 +468,13 @@ function BoqTab({ projectName }: { projectName: string }) {
   )
 }
 
-function BoqEmpty({ onImport, onScratch }: { onImport: () => void; onScratch: () => void }) {
+function BoqEmpty({
+  onImport,
+  onScratch,
+}: {
+  onImport: () => void
+  onScratch: () => void
+}) {
   return (
     <div className='rounded-lg border border-border bg-card p-10 text-center'>
       <div className='mx-auto mb-3 grid size-12 place-items-center rounded-lg border border-dashed border-border bg-muted text-muted-foreground'>
@@ -366,9 +483,9 @@ function BoqEmpty({ onImport, onScratch }: { onImport: () => void; onScratch: ()
       <div className='text-base font-semibold text-foreground'>
         No Bill of Quantities yet
       </div>
-      <p className='mx-auto mb-5 mt-1.5 max-w-md text-xs text-muted-foreground'>
-        Start from an existing priced spreadsheet, or build the BoQ from scratch.
-        Most teams import their tender BoQ, then adjust.
+      <p className='mx-auto mt-1.5 mb-5 max-w-md text-xs text-muted-foreground'>
+        Start from an existing priced spreadsheet, or build the BoQ from
+        scratch. Most teams import their tender BoQ, then adjust.
       </p>
       <div className='flex flex-wrap justify-center gap-3'>
         <button
@@ -376,16 +493,24 @@ function BoqEmpty({ onImport, onScratch }: { onImport: () => void; onScratch: ()
           className='flex w-52 flex-col items-center gap-1.5 rounded-lg border border-border bg-muted/50 p-4 transition hover:bg-muted'
         >
           <Upload className='size-5 text-muted-foreground' />
-          <span className='text-sm font-medium text-foreground'>Import from Excel</span>
-          <span className='text-[11px] text-muted-foreground'>.xlsx / .csv · recommended</span>
+          <span className='text-sm font-medium text-foreground'>
+            Import from Excel
+          </span>
+          <span className='text-[11px] text-muted-foreground'>
+            .xlsx / .csv · recommended
+          </span>
         </button>
         <button
           onClick={onScratch}
           className='flex w-52 flex-col items-center gap-1.5 rounded-lg border border-dashed border-border p-4 transition hover:bg-muted/40'
         >
           <Plus className='size-5 text-muted-foreground' />
-          <span className='text-sm font-medium text-foreground'>Create from scratch</span>
-          <span className='text-[11px] text-muted-foreground'>add sections & line items</span>
+          <span className='text-sm font-medium text-foreground'>
+            Create from scratch
+          </span>
+          <span className='text-[11px] text-muted-foreground'>
+            add sections & line items
+          </span>
         </button>
       </div>
     </div>
@@ -394,14 +519,30 @@ function BoqEmpty({ onImport, onScratch }: { onImport: () => void; onScratch: ()
 
 const importMappings = [
   { src: 'Item Ref', field: 'Code', match: 'Exact', tone: 'good' as const },
-  { src: 'Description of Works', field: 'Description', match: 'Exact', tone: 'good' as const },
+  {
+    src: 'Description of Works',
+    field: 'Description',
+    match: 'Exact',
+    tone: 'good' as const,
+  },
   { src: 'UoM', field: 'Unit', match: 'Likely', tone: 'risk' as const },
   { src: 'Quantity', field: 'Quantity', match: 'Exact', tone: 'good' as const },
   { src: 'Rate (£)', field: 'Rate', match: 'Exact', tone: 'good' as const },
-  { src: 'Amount', field: 'Amount (derived)', match: 'Review', tone: 'risk' as const },
+  {
+    src: 'Amount',
+    field: 'Amount (derived)',
+    match: 'Review',
+    tone: 'risk' as const,
+  },
 ]
 
-function BoqImport({ onCancel, onFinish }: { onCancel: () => void; onFinish: () => void }) {
+function BoqImport({
+  onCancel,
+  onFinish,
+}: {
+  onCancel: () => void
+  onFinish: () => void
+}) {
   return (
     <div>
       {/* stepper — wireframe L219-223 */}
@@ -416,22 +557,35 @@ function BoqImport({ onCancel, onFinish }: { onCancel: () => void; onFinish: () 
             <div className='mx-auto mb-3 grid size-10 place-items-center rounded-lg border border-border bg-card text-muted-foreground'>
               <Upload className='size-4' />
             </div>
-            <div className='text-sm font-medium text-foreground'>Drop Excel / CSV here</div>
-            <div className='mb-3 text-[11px] text-muted-foreground'>.xlsx, .xls, .csv up to 20MB</div>
-            <Button size='sm' className='rounded-md text-xs'>Browse files</Button>
+            <div className='text-sm font-medium text-foreground'>
+              Drop Excel / CSV here
+            </div>
+            <div className='mb-3 text-[11px] text-muted-foreground'>
+              .xlsx, .xls, .csv up to 20MB
+            </div>
+            <Button size='sm' className='rounded-md text-xs'>
+              Browse files
+            </Button>
           </div>
           <div className='flex items-center gap-3 rounded-md border border-border bg-card p-2.5'>
             <div className='grid size-7 place-items-center rounded bg-muted text-[10px] font-semibold text-muted-foreground'>
               XLS
             </div>
             <div className='flex-1'>
-              <div className='text-xs font-medium text-foreground'>tender_BoQ.xlsx</div>
-              <div className='text-[11px] text-muted-foreground'>142 rows detected</div>
+              <div className='text-xs font-medium text-foreground'>
+                tender_BoQ.xlsx
+              </div>
+              <div className='text-[11px] text-muted-foreground'>
+                142 rows detected
+              </div>
             </div>
             <Check className='size-4 text-emerald-600' />
           </div>
         </div>
-        <Panel title='Map spreadsheet columns to BoQ fields' description='Auto-matched where possible. Adjust any mapping below.'>
+        <Panel
+          title='Map spreadsheet columns to BoQ fields'
+          description='Auto-matched where possible. Adjust any mapping below.'
+        >
           <div
             className='grid gap-2 border-b border-border pb-2 text-[10px] tracking-wide text-muted-foreground uppercase'
             style={{ gridTemplateColumns: '1fr 28px 1fr 80px' }}
@@ -459,7 +613,12 @@ function BoqImport({ onCancel, onFinish }: { onCancel: () => void; onFinish: () 
             </div>
           ))}
           <div className='mt-4 flex justify-end gap-2'>
-            <Button variant='outline' size='sm' className='rounded-md text-xs' onClick={onCancel}>
+            <Button
+              variant='outline'
+              size='sm'
+              className='rounded-md text-xs'
+              onClick={onCancel}
+            >
               Cancel
             </Button>
             <Button size='sm' className='rounded-md text-xs' onClick={onFinish}>
@@ -492,14 +651,23 @@ function QuantitiesGrid({
   leaves: BoqLeaf[]
   setLeaves: React.Dispatch<React.SetStateAction<BoqLeaf[]>>
 }) {
-  const [editing, setEditing] = useState<{ id: string; field: 'qty' | 'rate' | 'pct' } | null>(null)
+  const [editing, setEditing] = useState<{
+    id: string
+    field: 'qty' | 'rate' | 'pct'
+  } | null>(null)
   const totals = computeTotals(leaves)
 
   const setField = (id: string, field: 'qty' | 'rate' | 'pct', value: number) =>
     setLeaves((prev) =>
       prev.map((l) =>
         l.id === id
-          ? { ...l, [field]: field === 'pct' ? Math.max(0, Math.min(100, value)) : Math.max(0, value) }
+          ? {
+              ...l,
+              [field]:
+                field === 'pct'
+                  ? Math.max(0, Math.min(100, value))
+                  : Math.max(0, value),
+            }
           : l
       )
     )
@@ -531,7 +699,9 @@ function QuantitiesGrid({
         onClick={() => editable(field) && setEditing({ id: l.id, field })}
         className={cn(
           'flex h-full items-center justify-end px-2 font-mono text-xs',
-          editable(field) ? 'cursor-pointer hover:bg-muted' : 'text-muted-foreground'
+          editable(field)
+            ? 'cursor-pointer hover:bg-muted'
+            : 'text-muted-foreground'
         )}
       >
         {field === 'rate' ? l.rate.toFixed(2) : l.qty.toLocaleString('en-GB')}
@@ -550,8 +720,12 @@ function QuantitiesGrid({
           <div className='p-2.5'>Code</div>
           <div className='p-2.5'>Description</div>
           <div className='p-2.5 text-center'>Unit</div>
-          <div className='p-2.5 text-right'>Qty{mode === 'active' && ' 🔒'}</div>
-          <div className='p-2.5 text-right'>Rate{mode === 'active' && ' 🔒'}</div>
+          <div className='p-2.5 text-right'>
+            Qty{mode === 'active' && ' 🔒'}
+          </div>
+          <div className='p-2.5 text-right'>
+            Rate{mode === 'active' && ' 🔒'}
+          </div>
           <div className='p-2.5 text-right'>Amount</div>
           <div className='p-2.5'>% Complete{mode === 'draft' && ' 🔒'}</div>
           <div className='p-2.5'>Status</div>
@@ -587,11 +761,19 @@ function QuantitiesGrid({
                   className='grid items-stretch border-b border-border/60 text-xs'
                   style={{ gridTemplateColumns: GRID }}
                 >
-                  <div className='p-2.5 font-mono text-[11px] text-muted-foreground'>{l.code}</div>
+                  <div className='p-2.5 font-mono text-[11px] text-muted-foreground'>
+                    {l.code}
+                  </div>
                   <div className='p-2.5 text-foreground'>{l.desc}</div>
-                  <div className='p-2.5 text-center text-muted-foreground'>{l.unit}</div>
-                  <div className='border-l border-border/50'>{numCell(l, 'qty')}</div>
-                  <div className='border-l border-border/50'>{numCell(l, 'rate')}</div>
+                  <div className='p-2.5 text-center text-muted-foreground'>
+                    {l.unit}
+                  </div>
+                  <div className='border-l border-border/50'>
+                    {numCell(l, 'qty')}
+                  </div>
+                  <div className='border-l border-border/50'>
+                    {numCell(l, 'rate')}
+                  </div>
                   <div className='flex items-center justify-end p-2.5 font-mono text-foreground'>
                     {gbp(l.qty * l.rate)}
                   </div>
@@ -628,7 +810,9 @@ function QuantitiesGrid({
               </div>
               <div className='flex items-center gap-2 p-2.5'>
                 <Progress value={sec.pct} className='h-1.5 flex-1 bg-muted' />
-                <span className='w-8 text-right font-mono text-muted-foreground'>{sec.pct}%</span>
+                <span className='w-8 text-right font-mono text-muted-foreground'>
+                  {sec.pct}%
+                </span>
               </div>
               <div />
             </div>
@@ -636,12 +820,21 @@ function QuantitiesGrid({
         ))}
 
         {/* contract total — wireframe L338-343 */}
-        <div className='grid border-t border-border bg-muted/60 text-xs' style={{ gridTemplateColumns: GRID }}>
-          <div className='col-span-5 p-3 font-semibold text-foreground'>Contract total</div>
-          <div className='p-3 text-right font-mono font-semibold text-foreground'>{gbp(totals.total)}</div>
+        <div
+          className='grid border-t border-border bg-muted/60 text-xs'
+          style={{ gridTemplateColumns: GRID }}
+        >
+          <div className='col-span-5 p-3 font-semibold text-foreground'>
+            Contract total
+          </div>
+          <div className='p-3 text-right font-mono font-semibold text-foreground'>
+            {gbp(totals.total)}
+          </div>
           <div className='flex items-center gap-2 p-3'>
             <Progress value={totals.pct} className='h-2 flex-1 bg-muted' />
-            <span className='font-mono text-[11px] font-semibold text-foreground'>{totals.pct}%</span>
+            <span className='font-mono text-[11px] font-semibold text-foreground'>
+              {totals.pct}%
+            </span>
           </div>
           <div />
         </div>
@@ -697,8 +890,16 @@ function PctCell({
         editable ? 'cursor-pointer hover:bg-muted' : ''
       )}
     >
-      <Progress value={leaf.pct} className={cn('h-2 flex-1', editable ? 'bg-muted' : 'bg-muted/50 opacity-60')} />
-      <span className='w-8 text-right font-mono text-[11px] text-muted-foreground'>{leaf.pct}%</span>
+      <Progress
+        value={leaf.pct}
+        className={cn(
+          'h-2 flex-1',
+          editable ? 'bg-muted' : 'bg-muted/50 opacity-60'
+        )}
+      />
+      <span className='w-8 text-right font-mono text-[11px] text-muted-foreground'>
+        {leaf.pct}%
+      </span>
     </div>
   )
 }
@@ -721,7 +922,9 @@ function RevisionHistory({ revisions }: { revisions: Revision[] }) {
             </span>
             <StatusPill tone={rv.tone}>{rv.status}</StatusPill>
             <span className='text-foreground'>{rv.note}</span>
-            <span className='text-muted-foreground'>{rv.date} · {rv.by}</span>
+            <span className='text-muted-foreground'>
+              {rv.date} · {rv.by}
+            </span>
             <button className='text-right text-[11px] text-muted-foreground hover:text-foreground'>
               View →
             </button>
@@ -745,7 +948,9 @@ function FieldUpdate({
   const bump = (id: string, delta: number) =>
     setLeaves((prev) =>
       prev.map((l) =>
-        l.id === id ? { ...l, pct: Math.max(0, Math.min(100, l.pct + delta)) } : l
+        l.id === id
+          ? { ...l, pct: Math.max(0, Math.min(100, l.pct + delta)) }
+          : l
       )
     )
   const set = (id: string, v: number) =>
@@ -764,16 +969,25 @@ function FieldUpdate({
           <div className='text-[10px] tracking-[0.16em] text-muted-foreground uppercase'>
             Field update · {projectName}
           </div>
-          <div className='mt-0.5 text-base font-semibold text-foreground'>Today's progress</div>
+          <div className='mt-0.5 text-base font-semibold text-foreground'>
+            Today's progress
+          </div>
         </div>
         <div className='max-h-[430px] overflow-auto p-3.5'>
           {fieldItems.map((f) => (
-            <div key={f.id} className='mt-2.5 rounded-lg border border-border p-3'>
+            <div
+              key={f.id}
+              className='mt-2.5 rounded-lg border border-border p-3'
+            >
               <div className='flex items-baseline justify-between'>
-                <div className='text-[13px] font-semibold text-foreground'>{f.desc}</div>
-                <div className='font-mono text-[13px] font-semibold text-muted-foreground'>{f.pct}%</div>
+                <div className='text-[13px] font-semibold text-foreground'>
+                  {f.desc}
+                </div>
+                <div className='font-mono text-[13px] font-semibold text-muted-foreground'>
+                  {f.pct}%
+                </div>
               </div>
-              <div className='mb-2.5 mt-0.5 text-[11px] text-muted-foreground'>
+              <div className='mt-0.5 mb-2.5 text-[11px] text-muted-foreground'>
                 {f.code} · {f.qty.toLocaleString('en-GB')} {f.unit}
               </div>
               <input
@@ -785,10 +999,16 @@ function FieldUpdate({
                 className='w-full'
               />
               <div className='mt-2.5 flex gap-2'>
-                <button onClick={() => bump(f.id, -5)} className='flex-1 rounded-md border border-border py-2 text-[13px] text-muted-foreground hover:bg-muted'>
+                <button
+                  onClick={() => bump(f.id, -5)}
+                  className='flex-1 rounded-md border border-border py-2 text-[13px] text-muted-foreground hover:bg-muted'
+                >
                   −5%
                 </button>
-                <button onClick={() => bump(f.id, 5)} className='flex-1 rounded-md border border-border py-2 text-[13px] text-muted-foreground hover:bg-muted'>
+                <button
+                  onClick={() => bump(f.id, 5)}
+                  className='flex-1 rounded-md border border-border py-2 text-[13px] text-muted-foreground hover:bg-muted'
+                >
                   +5%
                 </button>
               </div>
@@ -796,7 +1016,9 @@ function FieldUpdate({
           ))}
         </div>
         <div className='border-t border-border p-3.5'>
-          <Button className='w-full rounded-lg py-6 text-sm font-semibold'>Submit update</Button>
+          <Button className='w-full rounded-lg py-6 text-sm font-semibold'>
+            Submit update
+          </Button>
         </div>
       </div>
 
@@ -809,23 +1031,41 @@ function FieldUpdate({
           Update progress from the field — no spreadsheet needed
         </div>
         {[
-          ['1', 'Open today on site', 'Only items that are not yet complete show up, sorted by what crews are working on.'],
-          ['2', 'Nudge the percentage', 'Drag the slider or tap ±5% — changes apply to the active revision instantly.'],
-          ['3', 'Submit once', 'One submit posts every change; the office sees updated valuation in real time.'],
+          [
+            '1',
+            'Open today on site',
+            'Only items that are not yet complete show up, sorted by what crews are working on.',
+          ],
+          [
+            '2',
+            'Nudge the percentage',
+            'Drag the slider or tap ±5% — changes apply to the active revision instantly.',
+          ],
+          [
+            '3',
+            'Submit once',
+            'One submit posts every change; the office sees updated valuation in real time.',
+          ],
         ].map(([num, title, body]) => (
           <div key={num} className='mb-4 flex gap-3'>
             <div className='grid size-6 flex-none place-items-center rounded-md border border-border text-xs text-muted-foreground'>
               {num}
             </div>
             <div>
-              <div className='text-[13px] font-semibold text-foreground'>{title}</div>
-              <div className='mt-0.5 text-xs leading-relaxed text-muted-foreground'>{body}</div>
+              <div className='text-[13px] font-semibold text-foreground'>
+                {title}
+              </div>
+              <div className='mt-0.5 text-xs leading-relaxed text-muted-foreground'>
+                {body}
+              </div>
             </div>
           </div>
         ))}
         <div className='rounded-lg border border-dashed border-border bg-muted/40 p-3.5 text-xs leading-relaxed text-muted-foreground'>
-          Field updates change <strong className='text-foreground'>progress only</strong> against the active revision.
-          Quantities & rates stay locked — those go through a Revise draft.
+          Field updates change{' '}
+          <strong className='text-foreground'>progress only</strong> against the
+          active revision. Quantities & rates stay locked — those go through a
+          Revise draft.
         </div>
       </div>
     </div>
@@ -875,7 +1115,12 @@ function ProgressTab() {
         </Panel>
         <div className='grid gap-4'>
           {progressKpis.map((k) => (
-            <MetricCard key={k.label} label={k.label} value={k.value} hint={k.sub} />
+            <MetricCard
+              key={k.label}
+              label={k.label}
+              value={k.value}
+              hint={k.sub}
+            />
           ))}
         </div>
       </div>
@@ -898,10 +1143,16 @@ function ProgressTab() {
                   {g.initials}
                 </div>
                 <div className='min-w-0 flex-1'>
-                  <div className='text-xs font-medium text-foreground'>{g.name}</div>
-                  <div className='text-[11px] text-muted-foreground'>{g.type} · synced {g.sync}</div>
+                  <div className='text-xs font-medium text-foreground'>
+                    {g.name}
+                  </div>
+                  <div className='text-[11px] text-muted-foreground'>
+                    {g.type} · synced {g.sync}
+                  </div>
                 </div>
-                <StatusPill tone={g.status === 'Connected' ? 'good' : 'risk'}>{g.status}</StatusPill>
+                <StatusPill tone={g.status === 'Connected' ? 'good' : 'risk'}>
+                  {g.status}
+                </StatusPill>
               </div>
             ))}
           </div>
@@ -916,30 +1167,90 @@ function SCurve() {
     <div>
       <div className='mb-2 flex justify-end gap-4 text-[11px] text-muted-foreground'>
         <span className='flex items-center gap-1.5'>
-          <span className='inline-block w-3.5 border-t-2 border-muted-foreground' /> Planned
+          <span className='inline-block w-3.5 border-t-2 border-muted-foreground' />{' '}
+          Planned
         </span>
         <span className='flex items-center gap-1.5'>
-          <span className='inline-block w-3.5 border-t-2 border-dashed border-primary' /> Actual
+          <span className='inline-block w-3.5 border-t-2 border-dashed border-primary' />{' '}
+          Actual
         </span>
       </div>
       <svg viewBox='0 0 460 220' className='block h-auto w-full'>
         <line x1='40' y1='10' x2='40' y2='186' stroke='var(--border)' />
         <line x1='40' y1='186' x2='450' y2='186' stroke='var(--border)' />
-        <line x1='40' y1='142' x2='450' y2='142' stroke='var(--border)' opacity='0.5' />
-        <line x1='40' y1='98' x2='450' y2='98' stroke='var(--border)' opacity='0.5' />
-        <line x1='40' y1='54' x2='450' y2='54' stroke='var(--border)' opacity='0.5' />
-        {[['0', 189], ['25', 146], ['50', 102], ['75', 58], ['100', 16]].map(
-          ([t, y]) => (
-            <text key={t} x='30' y={y as number} textAnchor='end' fontSize='9' fill='var(--muted-foreground)'>
-              {t}
-            </text>
-          )
-        )}
-        <path d='M40,184 C140,178 180,150 230,108 C280,66 330,30 450,16' fill='none' stroke='var(--muted-foreground)' strokeWidth='2' />
-        <path d='M40,184 C130,180 170,162 220,132 C250,114 270,108 300,104' fill='none' stroke='var(--primary)' strokeWidth='2' strokeDasharray='5 4' />
+        <line
+          x1='40'
+          y1='142'
+          x2='450'
+          y2='142'
+          stroke='var(--border)'
+          opacity='0.5'
+        />
+        <line
+          x1='40'
+          y1='98'
+          x2='450'
+          y2='98'
+          stroke='var(--border)'
+          opacity='0.5'
+        />
+        <line
+          x1='40'
+          y1='54'
+          x2='450'
+          y2='54'
+          stroke='var(--border)'
+          opacity='0.5'
+        />
+        {[
+          ['0', 189],
+          ['25', 146],
+          ['50', 102],
+          ['75', 58],
+          ['100', 16],
+        ].map(([t, y]) => (
+          <text
+            key={t}
+            x='30'
+            y={y as number}
+            textAnchor='end'
+            fontSize='9'
+            fill='var(--muted-foreground)'
+          >
+            {t}
+          </text>
+        ))}
+        <path
+          d='M40,184 C140,178 180,150 230,108 C280,66 330,30 450,16'
+          fill='none'
+          stroke='var(--muted-foreground)'
+          strokeWidth='2'
+        />
+        <path
+          d='M40,184 C130,180 170,162 220,132 C250,114 270,108 300,104'
+          fill='none'
+          stroke='var(--primary)'
+          strokeWidth='2'
+          strokeDasharray='5 4'
+        />
         <circle cx='300' cy='104' r='3.5' fill='var(--primary)' />
-        <line x1='300' y1='14' x2='300' y2='186' stroke='var(--border)' strokeDasharray='2 3' />
-        <text x='300' y='202' textAnchor='middle' fontSize='9' fill='var(--muted-foreground)'>Today</text>
+        <line
+          x1='300'
+          y1='14'
+          x2='300'
+          y2='186'
+          stroke='var(--border)'
+          strokeDasharray='2 3'
+        />
+        <text
+          x='300'
+          y='202'
+          textAnchor='middle'
+          fontSize='9'
+          fill='var(--muted-foreground)'
+        >
+          Today
+        </text>
       </svg>
     </div>
   )
@@ -951,17 +1262,24 @@ function ScheduleTab() {
     <Panel title='Programme · indicative Gantt'>
       <div className='flex pl-40 text-[10px] tracking-wide text-muted-foreground uppercase'>
         {['Q1', 'Q2', 'Q3', 'Q4'].map((q) => (
-          <div key={q} className='flex-1'>{q}</div>
+          <div key={q} className='flex-1'>
+            {q}
+          </div>
         ))}
       </div>
       <div className='mt-2 space-y-2'>
         {gantt.map((g) => (
           <div key={g.name} className='flex items-center'>
-            <div className='w-40 flex-none text-xs text-foreground'>{g.name}</div>
+            <div className='w-40 flex-none text-xs text-foreground'>
+              {g.name}
+            </div>
             <div className='relative h-5 flex-1 rounded bg-muted'>
               <div
                 className='absolute inset-y-0 rounded bg-primary/70'
-                style={{ left: `${(g.start / 4) * 100}%`, width: `${(g.span / 4) * 100}%` }}
+                style={{
+                  left: `${(g.start / 4) * 100}%`,
+                  width: `${(g.span / 4) * 100}%`,
+                }}
               />
             </div>
           </div>
@@ -1004,7 +1322,9 @@ function DocumentsTab() {
             <span className='font-medium text-foreground'>{d.name}</span>
           </div>
           <div className='text-muted-foreground'>{d.type}</div>
-          <div className='font-mono text-[11px] text-muted-foreground'>{d.size}</div>
+          <div className='font-mono text-[11px] text-muted-foreground'>
+            {d.size}
+          </div>
           <div className='text-[11px] text-muted-foreground'>{d.updated}</div>
         </div>
       ))}
@@ -1030,7 +1350,9 @@ function TeamTab() {
               {u.initials}
             </span>
             <div className='flex-1'>
-              <div className='text-xs font-medium text-foreground'>{u.name}</div>
+              <div className='text-xs font-medium text-foreground'>
+                {u.name}
+              </div>
               <div className='text-[11px] text-muted-foreground'>{u.email}</div>
             </div>
             <div className='rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground'>
