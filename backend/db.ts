@@ -1,7 +1,7 @@
 import pg from 'pg'
-import { env } from './env'
+import { config } from './config'
 
-export const pool = new pg.Pool({ connectionString: env.DATABASE_URL })
+export const pool = new pg.Pool({ connectionString: config.DATABASE_URL })
 
 export type Querier = <R extends pg.QueryResultRow = any>(
   text: string,

@@ -4,7 +4,7 @@ import { query, withCtx } from '../db'
 import { Authed, asyncHandler, errors, validate } from '../http'
 import { verifyPassword, newRefreshToken, hashRefresh, signAccess } from '../auth/crypto'
 import { authenticate } from '../middleware'
-import { env } from '../env'
+import { config } from '../config'
 
 export const authRouter = Router()
 
@@ -12,10 +12,10 @@ const REFRESH_COOKIE = 'refresh_token'
 const COOKIE_PATH = '/api/v1/auth'
 const cookieOpts = {
   httpOnly: true,
-  secure: env.COOKIE_SECURE,
+  secure: config.COOKIE_SECURE,
   sameSite: 'strict' as const,
   path: COOKIE_PATH,
-  maxAge: env.REFRESH_TTL_S * 1000,
+  maxAge: config.REFRESH_TTL_S * 1000,
 }
 const MAX_FAILED = 5
 
@@ -25,12 +25,12 @@ async function startSession(res: any, userId: string, tid: string, req: Authed) 
     const s = await q<{ id: string }>(
       `INSERT INTO user_sessions (tenant_id, user_id, user_agent, ip_address, expires_at)
        VALUES ($1,$2,$3,$4, now() + ($5 || ' seconds')::interval) RETURNING id`,
-      [tid, userId, req.header('user-agent') ?? null, req.ip ?? null, env.REFRESH_TTL_S],
+      [tid, userId, req.header('user-agent') ?? null, req.ip ?? null, config.REFRESH_TTL_S],
     )
     await q(
       `INSERT INTO refresh_tokens (tenant_id, session_id, token_hash, expires_at)
        VALUES ($1,$2,$3, now() + ($4 || ' seconds')::interval)`,
-      [tid, s.rows[0].id, hash, env.REFRESH_TTL_S],
+      [tid, s.rows[0].id, hash, config.REFRESH_TTL_S],
     )
     await q(`UPDATE users SET last_login_at = now(), failed_login_count = 0 WHERE id = $1`, [userId])
     return s.rows[0].id
@@ -67,7 +67,7 @@ authRouter.post(
       throw errors.unauth('Invalid credentials.')
     }
     const access = await startSession(res, u.id, u.tenant_id, req as Authed)
-    res.json({ access_token: access, token_type: 'Bearer', expires_in: env.ACCESS_TTL_S })
+    res.json({ access_token: access, token_type: 'Bearer', expires_in: config.ACCESS_TTL_S })
   }),
 )
 
@@ -94,7 +94,7 @@ authRouter.post(
       const nt = await q<{ id: string }>(
         `INSERT INTO refresh_tokens (tenant_id, session_id, token_hash, expires_at)
          VALUES ($1,$2,$3, now() + ($4 || ' seconds')::interval) RETURNING id`,
-        [t.tenant_id, t.session_id, hash, env.REFRESH_TTL_S],
+        [t.tenant_id, t.session_id, hash, config.REFRESH_TTL_S],
       )
       await q(`UPDATE refresh_tokens SET used_at = now(), replaced_by = $2 WHERE id = $1`, [
         t.token_id,
@@ -106,7 +106,7 @@ authRouter.post(
     res.json({
       access_token: signAccess({ typ: 'tenant', sub: t.user_id, tid: t.tenant_id, sid: t.session_id }),
       token_type: 'Bearer',
-      expires_in: env.ACCESS_TTL_S,
+      expires_in: config.ACCESS_TTL_S,
     })
   }),
 )

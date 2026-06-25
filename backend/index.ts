@@ -1,7 +1,7 @@
 import express from 'express'
 import cookieParser from 'cookie-parser'
 import { randomUUID } from 'node:crypto'
-import { env } from './env'
+import { config } from './config'
 import { Authed, errorHandler } from './http'
 import { platformRouter } from './routes/platform'
 import { authRouter } from './routes/auth'
@@ -27,4 +27,4 @@ app.use('/api/v1', projectsRouter)
 
 app.use(errorHandler)
 
-app.listen(env.PORT, () => console.log(`API listening on http://localhost:${env.PORT}/api/v1`))
+app.listen(config.PORT, () => console.log(`API listening on http://localhost:${config.PORT}/api/v1`))

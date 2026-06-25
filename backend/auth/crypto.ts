@@ -1,6 +1,6 @@
 import { scryptSync, randomBytes, timingSafeEqual, createHash } from 'node:crypto'
 import jwt from 'jsonwebtoken'
-import { env } from '../env'
+import { config } from '../config'
 
 // Passwords: scrypt (stdlib, no native build). Format: scrypt$<saltHex>$<hashHex>.
 export function hashPassword(pw: string): string {
@@ -31,6 +31,6 @@ export type AccessClaims =
   | { typ: 'platform'; sub: string; sid: string; role: string }
 
 export const signAccess = (claims: AccessClaims) =>
-  jwt.sign(claims, env.JWT_SECRET, { expiresIn: env.ACCESS_TTL_S })
+  jwt.sign(claims, config.JWT_SECRET, { expiresIn: config.ACCESS_TTL_S })
 
-export const verifyAccess = (token: string) => jwt.verify(token, env.JWT_SECRET) as AccessClaims
+export const verifyAccess = (token: string) => jwt.verify(token, config.JWT_SECRET) as AccessClaims

@@ -10,7 +10,7 @@ import {
   signAccess,
 } from '../auth/crypto'
 import { authenticatePlatform } from '../middleware'
-import { env } from '../env'
+import { config } from '../config'
 
 export const platformRouter = Router()
 
@@ -18,10 +18,10 @@ const REFRESH_COOKIE = 'platform_refresh_token'
 const COOKIE_PATH = '/api/v1/platform/auth'
 const cookieOpts = {
   httpOnly: true,
-  secure: env.COOKIE_SECURE,
+  secure: config.COOKIE_SECURE,
   sameSite: 'strict' as const,
   path: COOKIE_PATH,
-  maxAge: env.REFRESH_TTL_S * 1000,
+  maxAge: config.REFRESH_TTL_S * 1000,
 }
 
 // Issue a platform session + first refresh token, return the access token.
@@ -31,12 +31,12 @@ async function startSession(res: any, adminId: string, role: string, req: Authed
     const s = await q<{ id: string }>(
       `INSERT INTO platform_sessions (platform_admin_id, user_agent, ip_address, expires_at)
        VALUES ($1,$2,$3, now() + ($4 || ' seconds')::interval) RETURNING id`,
-      [adminId, req.header('user-agent') ?? null, req.ip ?? null, env.REFRESH_TTL_S],
+      [adminId, req.header('user-agent') ?? null, req.ip ?? null, config.REFRESH_TTL_S],
     )
     await q(
       `INSERT INTO platform_refresh_tokens (session_id, token_hash, expires_at)
        VALUES ($1,$2, now() + ($3 || ' seconds')::interval)`,
-      [s.rows[0].id, hash, env.REFRESH_TTL_S],
+      [s.rows[0].id, hash, config.REFRESH_TTL_S],
     )
     return s.rows[0].id
   })
@@ -58,7 +58,7 @@ platformRouter.post(
       throw errors.unauth('Invalid credentials.')
     }
     const access = await startSession(res, a.id, a.role, req as Authed)
-    res.json({ access_token: access, token_type: 'Bearer', expires_in: env.ACCESS_TTL_S })
+    res.json({ access_token: access, token_type: 'Bearer', expires_in: config.ACCESS_TTL_S })
   }),
 )
 
@@ -87,7 +87,7 @@ platformRouter.post(
         const nt = await q<{ id: string }>(
           `INSERT INTO platform_refresh_tokens (session_id, token_hash, expires_at)
            VALUES ($1,$2, now() + ($3 || ' seconds')::interval) RETURNING id`,
-          [t.session_id, hash, env.REFRESH_TTL_S],
+          [t.session_id, hash, config.REFRESH_TTL_S],
         )
         await q(`UPDATE platform_refresh_tokens SET used_at = now(), replaced_by = $2 WHERE id = $1`, [
           t.token_id,
@@ -104,7 +104,7 @@ platformRouter.post(
     res.json({
       access_token: signAccess({ typ: 'platform', sub: t.platform_admin_id, sid: t.session_id, role }),
       token_type: 'Bearer',
-      expires_in: env.ACCESS_TTL_S,
+      expires_in: config.ACCESS_TTL_S,
     })
   }),
 )

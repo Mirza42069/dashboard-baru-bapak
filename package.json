@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "api:dev": "tsx watch backend/index.ts",
-    "api:start": "tsx backend/index.ts",
-    "api:bootstrap": "tsx backend/scripts/bootstrap-platform-admin.ts",
+    "api:dev": "tsx watch --env-file-if-exists=.env backend/index.ts",
+    "api:start": "tsx --env-file-if-exists=.env backend/index.ts",
+    "api:bootstrap": "tsx --env-file-if-exists=.env backend/scripts/bootstrap-platform-admin.ts",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
