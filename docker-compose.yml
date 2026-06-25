@@ -1,6 +1,27 @@
 services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://app_rls:app@db:5432/app
+      JWT_SECRET: ${JWT_SECRET:-dev-insecure-secret-change-me}
+      PORT: 3001
+      COOKIE_SECURE: "false"
+      ACCESS_TTL_S: 900
+      REFRESH_TTL_S: 2592000
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./backend:/app/backend:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
   db:
     image: postgres:16
+    pull_policy: never
     restart: unless-stopped
     environment:
       POSTGRES_USER: app

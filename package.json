@@ -3,6 +3,7 @@
   "private": false,
   "version": "2.2.1",
   "type": "module",
+  "packageManager": "pnpm@10.25.0",
   "scripts": {
     "dev": "vite",
     "api:dev": "tsx watch --env-file-if-exists=.env backend/index.ts",
