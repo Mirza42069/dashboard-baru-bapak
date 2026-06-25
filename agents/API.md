@@ -6,7 +6,7 @@ REST API surface built on the data model in `BACKEND.md`. This is the foundation
 
 ## 0. Implementation status
 
-> **Updated 2026-06-23.** The build follows an **operator-provisioned** model — a platform admin creates each firm and its first tenant admin — which diverges from parts of this spec that were written for self-serve signup. This section is the source of truth for what is live; the sections below are annotated (➡️) where reality changed. Code lives in `server/` (Express + `pg`); DB additions in `db/02_api_foundation.sql`.
+> **Updated 2026-06-23.** The build follows an **operator-provisioned** model — a platform admin creates each firm and its first tenant admin — which diverges from parts of this spec that were written for self-serve signup. This section is the source of truth for what is live; the sections below are annotated (➡️) where reality changed. Code lives in `backend/` (Express + `pg`); DB additions in `db/02_api_foundation.sql`.
 
 **Implemented & wired to the live RLS database**
 - **Platform-admin plane** (new — see §2.1): `/platform/auth/{login,refresh,logout,me}`, `POST /platform/tenants`, `GET /platform/tenants`, `POST /platform/tenants/{tenantId}/admins`.
@@ -169,7 +169,7 @@ Every protected endpoint declares **(required permission, scope source)**. The g
 
 ### 3.1 Generalized permission check (extends `fn_user_project_permissions`)
 
-➡️ **Implemented** as-is in `db/02_api_foundation.sql`; `requirePermission` (`server/middleware.ts`) calls it inside the request's tenant transaction.
+➡️ **Implemented** as-is in `db/02_api_foundation.sql`; `requirePermission` (`backend/middleware.ts`) calls it inside the request's tenant transaction.
 
 ```sql
 CREATE OR REPLACE FUNCTION fn_user_has_permission(
@@ -205,7 +205,7 @@ Coverage rules: a **tenant** grant covers everything; a **client** grant covers 
 4. handler              -> business logic; RLS guarantees tenant isolation as a backstop
 ```
 
-➡️ Each step that touches the DB opens its own `withCtx` transaction with `SET LOCAL` GUCs (`server/db.ts`). `app.current_user_id` is set but not yet consumed by any policy/trigger — `created_by`/audit actor are written explicitly in handlers.
+➡️ Each step that touches the DB opens its own `withCtx` transaction with `SET LOCAL` GUCs (`backend/db.ts`). `app.current_user_id` is set but not yet consumed by any policy/trigger — `created_by`/audit actor are written explicitly in handlers.
 
 ### 3.3 Guard, framework-agnostic (TS flavor)
 
