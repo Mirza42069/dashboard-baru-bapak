@@ -34,8 +34,10 @@ function readBearer(req: Authed) {
   }
 }
 
-// Where the guard reads the scope id from the request.
-export type ScopeSpec = (req: Authed) => { type: ScopeType; id: string | null }
+// Where the guard reads the scope id from the request. May be async when the
+// scope id must be resolved from the DB (e.g. project_id behind a versionId).
+type Scope = { type: ScopeType; id: string | null }
+export type ScopeSpec = (req: Authed) => Scope | Promise<Scope>
 export const tenantScope: ScopeSpec = () => ({ type: 'tenant', id: null })
 export const paramScope =
   (type: 'client' | 'project', param: string): ScopeSpec =>
@@ -44,7 +46,7 @@ export const paramScope =
 // API.md §3.3 — ask the DB whether the user holds the permission at a covering scope.
 export function requirePermission(perm: string, scope: ScopeSpec) {
   return asyncHandler(async (req: Authed, _res: Response, next: NextFunction) => {
-    const { type, id } = scope(req)
+    const { type, id } = await scope(req)
     const ok = await withCtx(req.ctx, async (q) => {
       const r = await q<{ ok: boolean }>(
         'SELECT fn_user_has_permission($1,$2,$3,$4) AS ok',

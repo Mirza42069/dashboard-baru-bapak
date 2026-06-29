@@ -8,6 +8,7 @@ import { authRouter } from './routes/auth'
 import { membersRouter } from './routes/members'
 import { clientsRouter } from './routes/clients'
 import { projectsRouter } from './routes/projects'
+import { boqRouter } from './routes/boq'
 
 const app = express()
 app.use(express.json())
@@ -24,6 +25,7 @@ app.use('/api/v1/auth', authRouter)
 app.use('/api/v1', membersRouter)
 app.use('/api/v1', clientsRouter)
 app.use('/api/v1', projectsRouter)
+app.use('/api/v1', boqRouter)
 
 app.use(errorHandler)
 
