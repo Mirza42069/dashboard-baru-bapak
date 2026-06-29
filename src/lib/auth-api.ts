@@ -13,6 +13,14 @@ async function errorMessage(res: Response) {
 
 export type LoginResult = { access_token: string; token_type: string; expires_in: number }
 
+export type PlatformAdmin = {
+  id: string
+  email: string
+  full_name: string
+  role: string
+  status: string
+}
+
 export type Me = {
   user: { id: string; email: string; full_name: string; status: string }
   tenant: { id: string; name: string; slug: string }
@@ -31,8 +39,33 @@ export async function login(email: string, password: string): Promise<LoginResul
   return res.json()
 }
 
+export async function platformLogin(
+  email: string,
+  password: string
+): Promise<LoginResult> {
+  const res = await fetch(`${BASE}/platform/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ email, password }),
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
 export async function getMe(token: string): Promise<Me> {
   const res = await fetch(`${BASE}/auth/me`, {
+    headers: { authorization: `Bearer ${token}` },
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function getPlatformMe(
+  token: string
+): Promise<{ admin: PlatformAdmin }> {
+  const res = await fetch(`${BASE}/platform/auth/me`, {
     headers: { authorization: `Bearer ${token}` },
     credentials: 'include',
   })
@@ -43,6 +76,14 @@ export async function getMe(token: string): Promise<Me> {
 // Best-effort server-side session revoke; ignore network/HTTP failures.
 export async function logout(token: string): Promise<void> {
   await fetch(`${BASE}/auth/logout`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+    credentials: 'include',
+  }).catch(() => {})
+}
+
+export async function platformLogout(token: string): Promise<void> {
+  await fetch(`${BASE}/platform/auth/logout`, {
     method: 'POST',
     headers: { authorization: `Bearer ${token}` },
     credentials: 'include',

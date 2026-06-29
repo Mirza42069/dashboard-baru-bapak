@@ -12,6 +12,14 @@ const sampleUser = {
   full_name: 'User One',
 }
 
+const sampleAdmin = {
+  id: 'admin-1',
+  email: 'ops@example.com',
+  full_name: 'Ops One',
+  role: 'super_admin',
+  status: 'active',
+}
+
 describe('useAuthStore', () => {
   beforeEach(() => {
     clearCookies()
@@ -70,6 +78,36 @@ describe('useAuthStore', () => {
     const useAuthStoreAfterReload = await importAuthStore()
 
     expect(useAuthStoreAfterReload.getState().auth.user).toBeNull()
+    expect(useAuthStoreAfterReload.getState().auth.accessToken).toBe('')
+  })
+
+  it('keeps platform auth separate from tenant auth', async () => {
+    const useAuthStore = await importAuthStore()
+    useAuthStore.getState().auth.setAccessToken('tenant-token')
+    useAuthStore.getState().platform.setAccessToken('platform-token')
+    useAuthStore.getState().platform.setAdmin({ ...sampleAdmin })
+
+    expect(useAuthStore.getState().auth.accessToken).toBe('tenant-token')
+    expect(useAuthStore.getState().platform.accessToken).toBe('platform-token')
+    expect(useAuthStore.getState().platform.admin).toEqual(sampleAdmin)
+
+    useAuthStore.getState().platform.reset()
+
+    expect(useAuthStore.getState().auth.accessToken).toBe('tenant-token')
+    expect(useAuthStore.getState().platform.accessToken).toBe('')
+    expect(useAuthStore.getState().platform.admin).toBeNull()
+  })
+
+  it('persists platform access token separately', async () => {
+    const useAuthStore = await importAuthStore()
+    useAuthStore.getState().platform.setAccessToken('platform-session-token')
+
+    vi.resetModules()
+    const useAuthStoreAfterReload = await importAuthStore()
+
+    expect(useAuthStoreAfterReload.getState().platform.accessToken).toBe(
+      'platform-session-token'
+    )
     expect(useAuthStoreAfterReload.getState().auth.accessToken).toBe('')
   })
 })

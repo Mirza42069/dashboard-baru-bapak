@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as PlatformIndexRouteImport } from './routes/platform/index'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as errors503RouteImport } from './routes/(errors)/503'
 import { Route as errors500RouteImport } from './routes/(errors)/500'
@@ -31,9 +32,15 @@ import { Route as AuthenticatedSettingsAppearanceRouteImport } from './routes/_a
 import { Route as AuthenticatedSettingsAccountRouteImport } from './routes/_authenticated/settings/account'
 import { Route as AuthenticatedProjectsCodeRouteImport } from './routes/_authenticated/projects/$code'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
+import { Route as authPlatformSignInRouteImport } from './routes/(auth)/platform/sign-in'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlatformIndexRoute = PlatformIndexRouteImport.update({
+  id: '/platform/',
+  path: '/platform/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
@@ -151,6 +158,11 @@ const AuthenticatedErrorsErrorRoute =
     path: '/errors/$error',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const authPlatformSignInRoute = authPlatformSignInRouteImport.update({
+  id: '/(auth)/platform/sign-in',
+  path: '/platform/sign-in',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -164,6 +176,8 @@ export interface FileRoutesByFullPath {
   '/404': typeof errors404Route
   '/500': typeof errors500Route
   '/503': typeof errors503Route
+  '/platform/': typeof PlatformIndexRoute
+  '/platform/sign-in': typeof authPlatformSignInRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/projects/$code': typeof AuthenticatedProjectsCodeRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
@@ -186,6 +200,8 @@ export interface FileRoutesByTo {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/': typeof AuthenticatedIndexRoute
+  '/platform': typeof PlatformIndexRoute
+  '/platform/sign-in': typeof authPlatformSignInRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/projects/$code': typeof AuthenticatedProjectsCodeRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
@@ -211,6 +227,8 @@ export interface FileRoutesById {
   '/(errors)/500': typeof errors500Route
   '/(errors)/503': typeof errors503Route
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/platform/': typeof PlatformIndexRoute
+  '/(auth)/platform/sign-in': typeof authPlatformSignInRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/projects/$code': typeof AuthenticatedProjectsCodeRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
@@ -236,6 +254,8 @@ export interface FileRouteTypes {
     | '/404'
     | '/500'
     | '/503'
+    | '/platform/'
+    | '/platform/sign-in'
     | '/errors/$error'
     | '/projects/$code'
     | '/settings/account'
@@ -258,6 +278,8 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/'
+    | '/platform'
+    | '/platform/sign-in'
     | '/errors/$error'
     | '/projects/$code'
     | '/settings/account'
@@ -282,6 +304,8 @@ export interface FileRouteTypes {
     | '/(errors)/500'
     | '/(errors)/503'
     | '/_authenticated/'
+    | '/platform/'
+    | '/(auth)/platform/sign-in'
     | '/_authenticated/errors/$error'
     | '/_authenticated/projects/$code'
     | '/_authenticated/settings/account'
@@ -305,6 +329,8 @@ export interface RootRouteChildren {
   errors404Route: typeof errors404Route
   errors500Route: typeof errors500Route
   errors503Route: typeof errors503Route
+  PlatformIndexRoute: typeof PlatformIndexRoute
+  authPlatformSignInRoute: typeof authPlatformSignInRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -314,6 +340,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/platform/': {
+      id: '/platform/'
+      path: '/platform'
+      fullPath: '/platform/'
+      preLoaderRoute: typeof PlatformIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/': {
@@ -463,6 +496,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedErrorsErrorRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/(auth)/platform/sign-in': {
+      id: '/(auth)/platform/sign-in'
+      path: '/platform/sign-in'
+      fullPath: '/platform/sign-in'
+      preLoaderRoute: typeof authPlatformSignInRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -523,6 +563,8 @@ const rootRouteChildren: RootRouteChildren = {
   errors404Route: errors404Route,
   errors500Route: errors500Route,
   errors503Route: errors503Route,
+  PlatformIndexRoute: PlatformIndexRoute,
+  authPlatformSignInRoute: authPlatformSignInRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
