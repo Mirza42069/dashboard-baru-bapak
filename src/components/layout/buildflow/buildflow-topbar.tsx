@@ -1,6 +1,17 @@
-import { Bell, ChevronDown, Menu, Search } from 'lucide-react'
+import { useLocation, useNavigate } from '@tanstack/react-router'
+import { Bell, ChevronDown, LogOut, Menu, Search } from 'lucide-react'
+import { logout } from '@/lib/auth-api'
+import { useAuthStore } from '@/stores/auth-store'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { BuildFlowBrand } from './buildflow-brand'
@@ -9,6 +20,28 @@ import { TopbarThemeButton } from './topbar-theme-button'
 import { workspaceLinks } from './workspace-links'
 
 export function BuildFlowTopbar() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { auth } = useAuthStore()
+  const user = auth.user
+  const displayName = user?.full_name || user?.email || 'User'
+  const initials = displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'U'
+
+  const handleLogout = () => {
+    if (auth.accessToken) void logout(auth.accessToken)
+    auth.reset()
+    navigate({
+      to: '/sign-in',
+      search: { redirect: location.href },
+      replace: true,
+    })
+  }
+
   return (
     <header className='sticky top-0 z-30 flex h-14 items-center border-b border-border bg-background/95 px-3 backdrop-blur md:px-4'>
       <Sheet>
@@ -57,9 +90,38 @@ export function BuildFlowTopbar() {
           <Bell className='size-4' />
         </Button>
         <TopbarThemeButton />
-        <Avatar className='size-9 border border-border bg-muted'>
-          <AvatarFallback className='text-xs font-medium'>CM</AvatarFallback>
-        </Avatar>
+        <DropdownMenu modal={false}>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant='ghost'
+              className='size-9 rounded-full p-0 hover:bg-muted'
+              aria-label='Open user menu'
+            >
+              <Avatar className='size-9 border border-border bg-muted'>
+                <AvatarFallback className='text-xs font-medium'>
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent className='w-56' align='end' forceMount>
+            <DropdownMenuLabel className='font-normal'>
+              <div className='flex flex-col gap-1.5'>
+                <p className='truncate text-sm leading-none font-medium'>
+                  {displayName}
+                </p>
+                <p className='truncate text-xs leading-none text-muted-foreground'>
+                  {user?.email || 'No email available'}
+                </p>
+              </div>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant='destructive' onClick={handleLogout}>
+              <LogOut className='size-4' />
+              Log out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   )
