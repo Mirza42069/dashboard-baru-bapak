@@ -11,7 +11,18 @@ import {
 } from 'lucide-react'
 import { Area, AreaChart, CartesianGrid, XAxis } from 'recharts'
 import { toast } from 'sonner'
-import { createMember, getMe, listMembers, type TenantMember } from '@/lib/auth-api'
+import {
+  createClient,
+  createMember,
+  createProject,
+  getMe,
+  listClients,
+  listMembers,
+  listProjects,
+  type Client,
+  type Project as ApiProject,
+  type TenantMember,
+} from '@/lib/auth-api'
 import { useAuthStore } from '@/stores/auth-store'
 import { Button } from '@/components/ui/button'
 import {
@@ -39,6 +50,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
 import {
   EmptyState,
   EmptyPage,
@@ -197,16 +209,50 @@ export function TenantDashboard() {
 }
 
 export function ProjectsPage() {
+  const { auth } = useAuthStore()
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('all')
+  const [rows, setRows] = useState<ApiProject[]>([])
+  const [loading, setLoading] = useState(true)
   const deferredQuery = useDeferredValue(query)
-  const filtered = projects.filter((project) => {
-    const matchesQuery = `${project.name} ${project.code} ${project.owner}`
+  const token = auth.accessToken
+  const filtered = rows.filter((project) => {
+    const managers = project.managers.map((m) => m.full_name || m.email).join(' ')
+    const matchesQuery = `${project.name} ${project.code ?? ''} ${project.client.name} ${managers}`
       .toLowerCase()
       .includes(deferredQuery.toLowerCase())
     const matchesStatus = status === 'all' || project.status === status
     return matchesQuery && matchesStatus
   })
+
+  async function refreshProjects() {
+    if (!token) return
+    setLoading(true)
+    try {
+      const res = await listProjects(token)
+      setRows(res.data)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to load projects.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!token) return
+    async function loadProjects() {
+      try {
+        const res = await listProjects(token)
+        setRows(res.data)
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to load projects.')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    void loadProjects()
+  }, [token])
 
   return (
     <>
@@ -214,12 +260,12 @@ export function ProjectsPage() {
         eyebrow='Tenant workspace'
         title='Projects'
         description='Project register with search, status filtering, and delivery signals.'
-        action={<NewProjectDialog />}
+        action={<NewProjectDialog onCreated={refreshProjects} />}
       />
       <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
         <MetricCard
           label='Open projects'
-          value={String(projects.length)}
+          value={String(rows.length)}
           hint='current total'
           tone='good'
         />
@@ -267,22 +313,26 @@ export function ProjectsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value='all'>All statuses</SelectItem>
-              <SelectItem value='On track'>On track</SelectItem>
-              <SelectItem value='At risk'>At risk</SelectItem>
-              <SelectItem value='Delayed'>Delayed</SelectItem>
-              <SelectItem value='Setup'>Setup</SelectItem>
+              <SelectItem value='planning'>Planning</SelectItem>
+              <SelectItem value='active'>Active</SelectItem>
+              <SelectItem value='on_hold'>On hold</SelectItem>
+              <SelectItem value='completed'>Completed</SelectItem>
+              <SelectItem value='cancelled'>Cancelled</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-3'>
-          {filtered.length ? (
+          {loading ? (
+            <EmptyState message='Loading projects...' />
+          ) : filtered.length ? (
             filtered.map((project) => (
-              <ProjectCard key={project.code} project={project} />
+              <ProjectCard key={project.id} project={project} />
             ))
           ) : (
             <EmptyState message='No projects available.' />
           )}
           <NewProjectDialog
+            onCreated={refreshProjects}
             trigger={
               <button className='flex min-h-52 items-center justify-center rounded-md border border-dashed border-border text-sm text-muted-foreground transition hover:bg-muted/40'>
                 + New project
@@ -295,11 +345,12 @@ export function ProjectsPage() {
   )
 }
 
-function ProjectCard({ project }: { project: (typeof projects)[number] }) {
+function ProjectCard({ project }: { project: ApiProject }) {
+  const managers = project.managers.map((m) => m.full_name || m.email).join(', ')
   return (
     <Link
       to='/projects/$code'
-      params={{ code: project.code }}
+      params={{ code: project.code || project.id }}
       className='block rounded-md border border-border bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md'
     >
       <div className='flex items-start justify-between gap-2'>
@@ -309,12 +360,15 @@ function ProjectCard({ project }: { project: (typeof projects)[number] }) {
         </StatusPill>
       </div>
       <div className='my-1 font-mono text-[11px] text-muted-foreground'>
-        {project.code} · {project.owner}
+        {project.code || 'No code'} · {project.client.name}
+      </div>
+      <div className='text-[11px] text-muted-foreground'>
+        {managers || 'No manager assigned'}
       </div>
       <div className='mt-3 flex items-center gap-3'>
-        <Progress value={project.progress} className='h-2 flex-1 bg-muted' />
+        <Progress value={0} className='h-2 flex-1 bg-muted' />
         <span className='font-mono text-[11px] text-muted-foreground'>
-          {project.progress}%
+          0%
         </span>
       </div>
     </Link>
@@ -535,9 +589,137 @@ export function HelpCenterPage() {
   )
 }
 
-function NewProjectDialog({ trigger }: { trigger?: React.ReactNode }) {
+const emptyProjectForm = {
+  client_id: '',
+  name: '',
+  code: '',
+  description: '',
+  location: '',
+  contract_no: '',
+  contract_value: '',
+  contract_start: '',
+  contract_finish: '',
+  period_type: 'weekly' as ApiProject['period_type'],
+  schedule_start: '',
+  manager_user_ids: [] as string[],
+}
+
+const emptyClientForm = { name: '', code: '' }
+
+function hasManagerRole(member: TenantMember) {
   return (
-    <Dialog>
+    member.status === 'active' &&
+    member.assignments.some((assignment) => assignment.role === 'project_manager')
+  )
+}
+
+function NewProjectDialog({
+  trigger,
+  onCreated,
+}: {
+  trigger?: React.ReactNode
+  onCreated?: () => Promise<void> | void
+}) {
+  const { auth } = useAuthStore()
+  const token = auth.accessToken
+  const [open, setOpen] = useState(false)
+  const [form, setForm] = useState(emptyProjectForm)
+  const [clientForm, setClientForm] = useState(emptyClientForm)
+  const [clients, setClients] = useState<Client[]>([])
+  const [members, setMembers] = useState<TenantMember[]>([])
+  const [loadingOptions, setLoadingOptions] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [creatingClient, setCreatingClient] = useState(false)
+  const managers = members.filter(hasManagerRole)
+
+  useEffect(() => {
+    if (!open || !token) return
+    async function loadOptions() {
+      setLoadingOptions(true)
+      try {
+        const [clientRes, memberRes] = await Promise.all([
+          listClients(token),
+          listMembers(token),
+        ])
+        setClients(clientRes.data)
+        setMembers(memberRes.data)
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : 'Failed to load project options.'
+        )
+      } finally {
+        setLoadingOptions(false)
+      }
+    }
+
+    void loadOptions()
+  }, [open, token])
+
+  const toggleManager = (memberId: string) => {
+    setForm((current) => ({
+      ...current,
+      manager_user_ids: current.manager_user_ids.includes(memberId)
+        ? current.manager_user_ids.filter((id) => id !== memberId)
+        : [...current.manager_user_ids, memberId],
+    }))
+  }
+
+  async function submitClient(event: FormEvent) {
+    event.preventDefault()
+    if (!token) return
+    setCreatingClient(true)
+    try {
+      const res = await createClient(token, {
+        name: clientForm.name,
+        code: clientForm.code || null,
+      })
+      setClients((current) => [res.client, ...current])
+      setForm((current) => ({ ...current, client_id: res.client.id }))
+      setClientForm(emptyClientForm)
+      toast.success('Client created and selected.')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create client.')
+    } finally {
+      setCreatingClient(false)
+    }
+  }
+
+  async function submitProject(event: FormEvent) {
+    event.preventDefault()
+    if (!token) return
+    if (!form.manager_user_ids.length) {
+      toast.error('Select at least one project manager.')
+      return
+    }
+    setSaving(true)
+    try {
+      await createProject(token, {
+        client_id: form.client_id,
+        name: form.name,
+        code: form.code,
+        description: form.description || null,
+        location: form.location || null,
+        contract_no: form.contract_no || null,
+        contract_value: form.contract_value ? Number(form.contract_value) : null,
+        contract_start: form.contract_start || null,
+        contract_finish: form.contract_finish || null,
+        period_type: form.period_type,
+        schedule_start: form.schedule_start,
+        manager_user_ids: form.manager_user_ids,
+      })
+      toast.success('Project created.')
+      setForm(emptyProjectForm)
+      setOpen(false)
+      await onCreated?.()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create project.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {trigger ?? (
           <Button className='rounded-md text-xs'>
@@ -545,18 +727,225 @@ function NewProjectDialog({ trigger }: { trigger?: React.ReactNode }) {
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className='sm:max-w-3xl'>
         <DialogHeader>
           <DialogTitle>Create project</DialogTitle>
           <DialogDescription>
-            Enter project details to start setup.
+            Register contract details, schedule setup, client, and assigned project managers.
           </DialogDescription>
         </DialogHeader>
-        <div className='grid gap-3 py-2'>
-          <Input placeholder='Project name' />
-          <Input placeholder='Project code' />
-          <Input placeholder='Project manager' />
-          <Button>Preview project setup</Button>
+        <div className='max-h-[75vh] overflow-y-auto pr-1'>
+          <div className='mb-4 rounded-md border border-border bg-muted/30 p-3'>
+            <div className='mb-2 text-sm font-medium text-foreground'>Client</div>
+            <div className='grid gap-3 md:grid-cols-[1fr_1fr_auto]'>
+              <div className='grid gap-2'>
+                <Label htmlFor='project-client'>Existing client</Label>
+                <Select
+                  value={form.client_id}
+                  onValueChange={(client_id) => setForm({ ...form, client_id })}
+                  disabled={loadingOptions || !clients.length}
+                >
+                  <SelectTrigger id='project-client'>
+                    <SelectValue placeholder={clients.length ? 'Select client' : 'No clients yet'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clients.map((client) => (
+                      <SelectItem key={client.id} value={client.id}>
+                        {client.name}{client.code ? ` (${client.code})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <form className='contents' onSubmit={submitClient}>
+                <div className='grid gap-2'>
+                  <Label htmlFor='new-client-name'>New client</Label>
+                  <Input
+                    id='new-client-name'
+                    placeholder='Client name'
+                    value={clientForm.name}
+                    onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })}
+                  />
+                </div>
+                <div className='grid gap-2'>
+                  <Label htmlFor='new-client-code'>Code</Label>
+                  <div className='flex gap-2'>
+                    <Input
+                      id='new-client-code'
+                      placeholder='Optional'
+                      value={clientForm.code}
+                      onChange={(e) => setClientForm({ ...clientForm, code: e.target.value })}
+                    />
+                    <Button type='submit' disabled={!clientForm.name || creatingClient}>
+                      {creatingClient ? 'Adding...' : 'Add'}
+                    </Button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <form className='grid gap-4' onSubmit={submitProject}>
+            <div className='grid gap-4 md:grid-cols-2'>
+              <div className='grid gap-2'>
+                <Label htmlFor='project-name'>Project name</Label>
+                <Input
+                  id='project-name'
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  required
+                />
+              </div>
+              <div className='grid gap-2'>
+                <Label htmlFor='project-code'>Project code</Label>
+                <Input
+                  id='project-code'
+                  value={form.code}
+                  onChange={(e) => setForm({ ...form, code: e.target.value })}
+                  required
+                />
+              </div>
+            </div>
+            <div className='grid gap-2'>
+              <Label htmlFor='project-description'>Description</Label>
+              <Textarea
+                id='project-description'
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                placeholder='Scope summary, package notes, or delivery objective'
+              />
+            </div>
+            <div className='grid gap-4 md:grid-cols-2'>
+              <div className='grid gap-2'>
+                <Label htmlFor='project-location'>Location</Label>
+                <Input
+                  id='project-location'
+                  value={form.location}
+                  onChange={(e) => setForm({ ...form, location: e.target.value })}
+                />
+              </div>
+              <div className='grid gap-2'>
+                <Label htmlFor='contract-no'>Contract number</Label>
+                <Input
+                  id='contract-no'
+                  value={form.contract_no}
+                  onChange={(e) => setForm({ ...form, contract_no: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className='grid gap-4 md:grid-cols-3'>
+              <div className='grid gap-2'>
+                <Label htmlFor='contract-value'>Contract value</Label>
+                <Input
+                  id='contract-value'
+                  type='number'
+                  min='0'
+                  step='0.01'
+                  value={form.contract_value}
+                  onChange={(e) => setForm({ ...form, contract_value: e.target.value })}
+                />
+              </div>
+              <div className='grid gap-2'>
+                <Label htmlFor='contract-start'>Contract start</Label>
+                <Input
+                  id='contract-start'
+                  type='date'
+                  value={form.contract_start}
+                  onChange={(e) => setForm({ ...form, contract_start: e.target.value })}
+                />
+              </div>
+              <div className='grid gap-2'>
+                <Label htmlFor='contract-finish'>Contract finish</Label>
+                <Input
+                  id='contract-finish'
+                  type='date'
+                  value={form.contract_finish}
+                  onChange={(e) => setForm({ ...form, contract_finish: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className='grid gap-4 md:grid-cols-2'>
+              <div className='grid gap-2'>
+                <Label htmlFor='period-type'>Reporting period</Label>
+                <Select
+                  value={form.period_type}
+                  onValueChange={(period_type: ApiProject['period_type']) =>
+                    setForm({ ...form, period_type })
+                  }
+                >
+                  <SelectTrigger id='period-type'>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='weekly'>Weekly</SelectItem>
+                    <SelectItem value='biweekly'>Biweekly</SelectItem>
+                    <SelectItem value='monthly'>Monthly</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className='grid gap-2'>
+                <Label htmlFor='schedule-start'>Schedule start</Label>
+                <Input
+                  id='schedule-start'
+                  type='date'
+                  value={form.schedule_start}
+                  onChange={(e) => setForm({ ...form, schedule_start: e.target.value })}
+                  required
+                />
+              </div>
+            </div>
+            <div className='grid gap-2'>
+              <Label>Project managers</Label>
+              <div className='grid gap-2 rounded-md border border-border p-3'>
+                {loadingOptions ? (
+                  <div className='text-xs text-muted-foreground'>Loading managers...</div>
+                ) : managers.length ? (
+                  managers.map((member) => {
+                    const selected = form.manager_user_ids.includes(member.id)
+                    return (
+                      <button
+                        key={member.id}
+                        type='button'
+                        onClick={() => toggleManager(member.id)}
+                        className={`flex items-center justify-between rounded-md border px-3 py-2 text-left text-xs transition ${
+                          selected
+                            ? 'border-primary bg-primary/10 text-foreground'
+                            : 'border-border hover:bg-muted/50'
+                        }`}
+                      >
+                        <span>
+                          <span className='font-medium'>{member.full_name || member.email}</span>
+                          <span className='block text-muted-foreground'>{member.email}</span>
+                        </span>
+                        <span>{selected ? 'Assigned' : 'Assign'}</span>
+                      </button>
+                    )
+                  })
+                ) : (
+                  <div className='text-xs text-muted-foreground'>
+                    No active Manager members available. Create a Manager account from Team first.
+                  </div>
+                )}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type='button' variant='outline' onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                disabled={
+                  saving ||
+                  !form.client_id ||
+                  !form.name ||
+                  !form.code ||
+                  !form.schedule_start ||
+                  !form.manager_user_ids.length
+                }
+              >
+                {saving ? 'Creating...' : 'Create project'}
+              </Button>
+            </DialogFooter>
+          </form>
         </div>
       </DialogContent>
     </Dialog>
@@ -831,11 +1220,11 @@ function MilestoneRow({
   )
 }
 function statusTone(status: string) {
-  return status === 'On track'
+  return status === 'On track' || status === 'active' || status === 'completed'
     ? 'good'
-    : status === 'At risk'
+    : status === 'At risk' || status === 'planning' || status === 'on_hold'
       ? 'risk'
-      : status === 'Delayed'
+      : status === 'Delayed' || status === 'cancelled'
         ? 'danger'
         : ('muted' as const)
 }

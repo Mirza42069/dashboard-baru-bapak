@@ -58,6 +58,34 @@ export type TenantMember = {
   }[]
 }
 
+export type Client = {
+  id: string
+  name: string
+  code: string | null
+  contact: Record<string, unknown>
+  created_at: string
+}
+
+export type Project = {
+  id: string
+  client_id: string
+  client: { id: string; name: string }
+  name: string
+  code: string | null
+  description: string | null
+  location: string | null
+  contract_no: string | null
+  contract_value: string | number | null
+  contract_start: string | null
+  contract_finish: string | null
+  status: 'planning' | 'active' | 'on_hold' | 'completed' | 'cancelled'
+  period_type: 'weekly' | 'biweekly' | 'monthly'
+  schedule_start: string | null
+  data_date: string | null
+  created_at: string
+  managers: Pick<TenantMember, 'id' | 'email' | 'full_name'>[]
+}
+
 export type Me = {
   user: { id: string; email: string; full_name: string; status: string }
   tenant: { id: string; name: string; slug: string }
@@ -166,6 +194,65 @@ export async function createMember(
       scope_type: 'tenant',
       scope_id: null,
     }),
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function listClients(token: string): Promise<{ data: Client[] }> {
+  const res = await fetch(`${BASE}/clients`, {
+    headers: { authorization: `Bearer ${token}` },
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function createClient(
+  token: string,
+  body: { name: string; code?: string | null }
+): Promise<{ client: Client }> {
+  const res = await fetch(`${BASE}/clients`, {
+    method: 'POST',
+    headers: tenantJsonHeaders(token),
+    credentials: 'include',
+    body: JSON.stringify({ ...body, contact: {} }),
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function listProjects(token: string): Promise<{ data: Project[] }> {
+  const res = await fetch(`${BASE}/projects`, {
+    headers: { authorization: `Bearer ${token}` },
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function createProject(
+  token: string,
+  body: {
+    client_id: string
+    name: string
+    code: string
+    description?: string | null
+    location?: string | null
+    contract_no?: string | null
+    contract_value?: number | null
+    contract_start?: string | null
+    contract_finish?: string | null
+    period_type: 'weekly' | 'biweekly' | 'monthly'
+    schedule_start: string
+    manager_user_ids: string[]
+  }
+): Promise<{ project: Project }> {
+  const res = await fetch(`${BASE}/projects`, {
+    method: 'POST',
+    headers: tenantJsonHeaders(token),
+    credentials: 'include',
+    body: JSON.stringify(body),
   })
   if (!res.ok) throw new Error(await errorMessage(res))
   return res.json()

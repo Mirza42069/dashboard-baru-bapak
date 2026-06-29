@@ -20,6 +20,7 @@ const createBody = z.object({
   contract_finish: dateStr.nullish(),
   period_type: z.enum(['weekly', 'biweekly', 'monthly']).default('weekly'),
   schedule_start: dateStr.nullish(),
+  manager_user_ids: z.array(z.string().uuid()).min(1),
 })
 
 const COLS = [
@@ -39,6 +40,23 @@ projectsRouter.post(
     const out = await withCtx(req.ctx, async (q) => {
       const c = await q(`SELECT 1 FROM clients WHERE id = $1 AND deleted_at IS NULL`, [b.client_id])
       if (!c.rowCount) throw errors.unprocessable('client_id does not reference a known client.')
+      const role = await q<{ id: string }>(
+        `SELECT id FROM roles WHERE tenant_id IS NULL AND key = 'project_manager'`,
+      )
+      if (!role.rowCount) throw errors.badRequest('Project manager role is not configured.')
+      const managers = await q<{ id: string }>(
+        `SELECT DISTINCT u.id
+         FROM users u
+         JOIN role_assignments ra ON ra.user_id = u.id
+         JOIN roles r ON r.id = ra.role_id
+         WHERE u.status = 'active'
+           AND r.key = 'project_manager'
+           AND u.id = ANY($1::uuid[])`,
+        [b.manager_user_ids],
+      )
+      if (managers.rowCount !== new Set(b.manager_user_ids).size) {
+        throw errors.unprocessable('Select active members with the Manager role.')
+      }
       const r = await q(
         `INSERT INTO projects
            (tenant_id, client_id, name, code, description, location, contract_no,
@@ -52,6 +70,12 @@ projectsRouter.post(
           b.contract_start ?? null, b.contract_finish ?? null, b.period_type,
           b.schedule_start ?? null, req.user!.id,
         ],
+      )
+      await q(
+        `INSERT INTO role_assignments (tenant_id, user_id, role_id, scope_type, scope_id, created_by)
+         SELECT $1, unnest($2::uuid[]), $3, 'project', $4, $5
+         ON CONFLICT (user_id, role_id, scope_type, scope_id) DO NOTHING`,
+        [req.user!.tid, b.manager_user_ids, role.rows[0].id, r.rows[0].id, req.user!.id],
       )
       return r.rows[0]
     }).catch((e) => {
@@ -79,19 +103,26 @@ projectsRouter.get(
     )
     const r = await withCtx(req.ctx, (qy) =>
       qy(
-        `SELECT ${projColsP}, c.name AS client_name
+        `SELECT ${projColsP}, c.name AS client_name,
+                COALESCE(json_agg(DISTINCT jsonb_build_object(
+                  'id', u.id, 'full_name', u.full_name, 'email', u.email
+                )) FILTER (WHERE u.id IS NOT NULL), '[]') AS managers
          FROM projects p JOIN clients c ON c.id = p.client_id
+         LEFT JOIN role_assignments ra ON ra.scope_type = 'project' AND ra.scope_id = p.id
+         LEFT JOIN roles r ON r.id = ra.role_id AND r.key = 'project_manager'
+         LEFT JOIN users u ON u.id = ra.user_id AND r.id IS NOT NULL
          WHERE p.deleted_at IS NULL
-           AND ($1::uuid IS NULL OR p.client_id = $1)
-           AND ($2::project_status IS NULL OR p.status = $2)
-           AND ($3::text IS NULL OR p.name ILIKE '%'||$3||'%' OR p.code ILIKE '%'||$3||'%')
-         ORDER BY p.created_at DESC`,
+            AND ($1::uuid IS NULL OR p.client_id = $1)
+            AND ($2::project_status IS NULL OR p.status = $2)
+            AND ($3::text IS NULL OR p.name ILIKE '%'||$3||'%' OR p.code ILIKE '%'||$3||'%')
+          GROUP BY ${projColsP}, c.name
+          ORDER BY p.created_at DESC`,
         [f.client_id ?? null, f.status ?? null, f.q ?? null],
       ),
     )
     const data = r.rows.map((row: any) => {
-      const { client_name, client_id, ...rest } = row
-      return { ...rest, client_id, client: { id: client_id, name: client_name } }
+      const { client_name, client_id, managers, ...rest } = row
+      return { ...rest, client_id, client: { id: client_id, name: client_name }, managers }
     })
     res.json({ data, page: { next_cursor: null, has_more: false } })
   }),
