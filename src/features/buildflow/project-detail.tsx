@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from '@tanstack/react-router'
-import { GripVertical, Pencil, Plus, Upload } from 'lucide-react'
+import { GripVertical, Pencil, Plus, Trash2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   activateBoqVersion,
   createBoqItem,
   createBoqVersion,
+  deleteBoqItem,
   getProject,
   listBoqItems,
   listBoqVersions,
@@ -283,31 +284,22 @@ const errMsg = (e: unknown) =>
 
 const BOQ_GRID = '90px minmax(160px,1.8fr) 60px 108px 128px 140px 84px'
 
-type Section = { header: BoqItem | null; leaves: BoqItem[] }
+type Section = { header: BoqItem; leaves: BoqItem[] }
 
-// Flat boq_items -> 2-level sections: a parent item (one referenced as someone's
-// parent_id) is a section header; everything else is a leaf, grouped under its
-// parent or collected as "Ungrouped".
+// Flat boq_items -> 2-level sections: a top-level item (parent_id null) is a
+// section; everything under it is a leaf. Empty sections still show.
 function buildSections(items: BoqItem[]): Section[] {
   const sorted = [...items].sort(
     (a, b) =>
       a.sort_order - b.sort_order ||
       a.code.localeCompare(b.code, undefined, { numeric: true })
   )
-  const parentIds = new Set(
-    sorted.filter((i) => i.parent_id).map((i) => i.parent_id as string)
-  )
-  const isHeader = (i: BoqItem) => parentIds.has(i.id)
-  const grouped = (i: BoqItem) => i.parent_id != null && parentIds.has(i.parent_id)
-  const sections: Section[] = sorted
-    .filter(isHeader)
+  return sorted
+    .filter((i) => i.parent_id == null)
     .map((h) => ({
       header: h,
-      leaves: sorted.filter((i) => i.parent_id === h.id && !isHeader(i)),
+      leaves: sorted.filter((i) => i.parent_id === h.id),
     }))
-  const orphans = sorted.filter((i) => !isHeader(i) && !grouped(i))
-  if (orphans.length) sections.push({ header: null, leaves: orphans })
-  return sections
 }
 
 // Move dragId to sit where targetId currently is, within an ordered id list.
@@ -438,6 +430,12 @@ function BoqTab({ projectId }: { projectId: string }) {
       await loadItems(current!.id)
     })
 
+  const removeItem = (itemId: string) =>
+    run(async () => {
+      await deleteBoqItem(token!, itemId)
+      await loadItems(current!.id)
+    })
+
   // Persist a drag-reordered group by rewriting its members' sort_order.
   const reorder = (orderedIds: string[]) =>
     run(async () => {
@@ -549,6 +547,7 @@ function BoqTab({ projectId }: { projectId: string }) {
             busy={busy}
             onCommit={commitCell}
             onReorder={reorder}
+            onDelete={removeItem}
           />
           {draft && (
             <AddItemForm
@@ -618,6 +617,7 @@ function BoqGrid({
   busy,
   onCommit,
   onReorder,
+  onDelete,
 }: {
   sections: Section[]
   total: number
@@ -625,18 +625,18 @@ function BoqGrid({
   busy: boolean
   onCommit: (id: string, field: 'quantity' | 'unit_rate', value: number) => void
   onReorder: (orderedIds: string[]) => void
+  onDelete: (id: string) => void
 }) {
   const [editing, setEditing] = useState<{
     id: string
     field: 'quantity' | 'unit_rate'
   } | null>(null)
-  // Drag-reorder within a group: 'S' = section headers, `L:<parent>` = leaves.
+  // Drag-reorder within a group: 'S' = sections, `L:<sectionId>` = leaves.
   const [drag, setDrag] = useState<{ id: string; group: string } | null>(null)
 
   const groupIds = (group: string): string[] => {
-    if (group === 'S')
-      return sections.map((s) => s.header?.id).filter(Boolean) as string[]
-    const sec = sections.find((s) => `L:${s.header?.id ?? 'orphan'}` === group)
+    if (group === 'S') return sections.map((s) => s.header.id)
+    const sec = sections.find((s) => `L:${s.header.id}` === group)
     return sec ? sec.leaves.map((l) => l.id) : []
   }
   const drop = (group: string, targetId: string) => {
@@ -723,45 +723,51 @@ function BoqGrid({
           <div className='p-2.5 text-right'>Weight</div>
         </div>
 
-        {sections.map((sec, idx) => {
+        {sections.map((sec) => {
           const amt = sec.leaves.reduce(
             (t, l) => t + num(l.quantity) * num(l.unit_rate),
             0
           )
           const wt = sec.leaves.reduce((t, l) => t + num(l.weight), 0)
+          const group = `L:${sec.header.id}`
           return (
-            <div key={sec.header?.id ?? `orphan-${idx}`}>
+            <div key={sec.header.id}>
               <div
                 className={cn(
                   'flex items-center justify-between bg-muted/40 px-2.5 py-2',
-                  draft && sec.header && 'cursor-grab',
-                  drag?.id === sec.header?.id && 'opacity-50'
+                  draft && 'cursor-grab',
+                  drag?.id === sec.header.id && 'opacity-50'
                 )}
-                {...(sec.header ? dragProps(sec.header.id, 'S') : {})}
-                {...(sec.header ? dropProps('S', sec.header.id) : {})}
+                {...dragProps(sec.header.id, 'S')}
+                {...dropProps('S', sec.header.id)}
               >
                 <div className='flex items-center gap-2 text-xs font-semibold text-foreground'>
-                  {sec.header ? (
-                    <>
-                      {draft && (
-                        <GripVertical className='size-3.5 text-muted-foreground' />
-                      )}
-                      <span className='grid place-items-center rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground'>
-                        {sec.header.code}
-                      </span>
-                      <span>{sec.header.description}</span>
-                    </>
-                  ) : (
-                    <span className='text-muted-foreground'>Ungrouped items</span>
+                  {draft && (
+                    <GripVertical className='size-3.5 text-muted-foreground' />
+                  )}
+                  <span className='grid place-items-center rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground'>
+                    {sec.header.code}
+                  </span>
+                  <span>{sec.header.description}</span>
+                </div>
+                <div className='flex items-center gap-3'>
+                  <span className='text-[11px] text-muted-foreground'>
+                    {sec.leaves.length} items
+                  </span>
+                  {draft && sec.leaves.length === 0 && (
+                    <button
+                      title='Delete empty section'
+                      disabled={busy}
+                      onClick={() => onDelete(sec.header.id)}
+                      className='text-muted-foreground hover:text-destructive disabled:opacity-50'
+                    >
+                      <Trash2 className='size-3.5' />
+                    </button>
                   )}
                 </div>
-                <span className='text-[11px] text-muted-foreground'>
-                  {sec.leaves.length} items
-                </span>
               </div>
 
               {sec.leaves.map((l) => {
-                const group = `L:${sec.header?.id ?? 'orphan'}`
                 return (
                 <div
                   key={l.id}
@@ -795,8 +801,18 @@ function BoqGrid({
                   <div className='flex items-center justify-end p-2.5 font-mono text-foreground'>
                     {gbp(num(l.quantity) * num(l.unit_rate))}
                   </div>
-                  <div className='flex items-center justify-end p-2.5 font-mono text-[11px] text-muted-foreground'>
+                  <div className='flex items-center justify-end gap-1.5 p-2.5 font-mono text-[11px] text-muted-foreground'>
                     {num(l.weight).toFixed(2)}%
+                    {draft && (
+                      <button
+                        title='Delete item'
+                        disabled={busy}
+                        onClick={() => onDelete(l.id)}
+                        className='text-muted-foreground hover:text-destructive disabled:opacity-50'
+                      >
+                        <Trash2 className='size-3.5' />
+                      </button>
+                    )}
                   </div>
                 </div>
                 )
@@ -807,7 +823,7 @@ function BoqGrid({
                 style={{ gridTemplateColumns: BOQ_GRID }}
               >
                 <div className='col-span-5 p-2.5 text-right text-muted-foreground italic'>
-                  Subtotal{sec.header ? ` — ${sec.header.description}` : ''}
+                  Subtotal — {sec.header.description}
                 </div>
                 <div className='p-2.5 text-right font-mono font-semibold text-foreground'>
                   {gbp(amt)}
@@ -867,11 +883,8 @@ function AddItemForm({
   onAddSection: (input: { code: string; description: string }) => void
   busy: boolean
 }) {
-  // Any existing item can be a parent; sections (headers) first, then leaves.
-  const parents = sections.flatMap((s) => [
-    ...(s.header ? [s.header] : []),
-    ...s.leaves,
-  ])
+  // Line items attach to a section (top-level item).
+  const parents = sections.map((s) => s.header)
 
   const emptySection = { code: '', description: '' }
   const emptyItem = {
