@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from '@tanstack/react-router'
-import { GripVertical, Pencil, Plus, Trash2, Upload } from 'lucide-react'
+import {
+  Check,
+  ChevronsUpDown,
+  GripVertical,
+  Pencil,
+  Plus,
+  Trash2,
+  Upload,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import {
   activateBoqVersion,
@@ -20,10 +28,23 @@ import {
 import { useAuthStore } from '@/stores/auth-store'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
 import { Input } from '@/components/ui/input'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { gbp } from './boq'
+import { boqUnits, gbp } from './boq'
 import { EmptyState, MetricCard, Panel, StatusPill } from './components'
 import { systems } from './data'
 
@@ -872,6 +893,85 @@ function Field({
   )
 }
 
+// Searchable unit picker: scroll the list or type to filter; an unlisted
+// typed value can be used as-is so unusual units aren't blocked.
+function UnitCombobox({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (v: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const typed = query.trim()
+  const showCustom =
+    typed.length > 0 &&
+    !boqUnits.some((u) => u.value.toLowerCase() === typed.toLowerCase())
+
+  const pick = (v: string) => {
+    onChange(v)
+    setQuery('')
+    setOpen(false)
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type='button'
+          variant='outline'
+          role='combobox'
+          aria-expanded={open}
+          className={cn(
+            'h-8 w-full justify-between text-xs font-normal',
+            !value && 'text-muted-foreground'
+          )}
+        >
+          {value || 'Unit'}
+          <ChevronsUpDown className='ms-1 size-3.5 shrink-0 opacity-50' />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className='w-56 p-0' align='start'>
+        <Command>
+          <CommandInput
+            placeholder='Search unit…'
+            value={query}
+            onValueChange={setQuery}
+            className='text-xs'
+          />
+          <CommandList>
+            <CommandEmpty>No unit found.</CommandEmpty>
+            <CommandGroup>
+              {showCustom && (
+                <CommandItem value={`use ${typed}`} onSelect={() => pick(typed)}>
+                  <Plus className='size-3.5' /> Use “{typed}”
+                </CommandItem>
+              )}
+              {boqUnits.map((u) => (
+                <CommandItem
+                  key={u.value}
+                  value={`${u.value} ${u.label}`}
+                  onSelect={() => pick(u.value)}
+                >
+                  <Check
+                    className={cn(
+                      'size-3.5',
+                      value === u.value ? 'opacity-100' : 'opacity-0'
+                    )}
+                  />
+                  <span className='font-mono'>{u.value}</span>
+                  <span className='ms-2 text-muted-foreground'>{u.label}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 function AddItemForm({
   sections,
   onAdd,
@@ -1002,8 +1102,11 @@ function AddItemForm({
                 className='h-8 text-xs'
               />
             </Field>
-            <Field label='Unit' className='w-16'>
-              <Input value={it.unit} onChange={setI('unit')} className='h-8 text-xs' />
+            <Field label='Unit' className='w-32'>
+              <UnitCombobox
+                value={it.unit}
+                onChange={(v) => setIt((p) => ({ ...p, unit: v }))}
+              />
             </Field>
             <Field label='Qty' className='w-24'>
               <Input

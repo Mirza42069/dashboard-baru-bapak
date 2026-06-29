@@ -67,3 +67,37 @@ export function computeTotals(leaves: BoqLeaf[]): BoqTotals {
 }
 
 export const gbp = (n: number) => '£' + Math.round(n).toLocaleString('en-GB')
+
+// Common construction Bill-of-Quantities units for the unit picker.
+// `value` is what's stored on the item; `label` is the searchable description.
+export const boqUnits: { value: string; label: string }[] = [
+  { value: 'ls', label: 'Lump sum' },
+  { value: 'item', label: 'Item' },
+  { value: 'no', label: 'Number / each' },
+  { value: 'set', label: 'Set' },
+  { value: 'pair', label: 'Pair' },
+  { value: 'm', label: 'Metre' },
+  { value: 'm²', label: 'Square metre' },
+  { value: 'm³', label: 'Cubic metre' },
+  { value: 'mm', label: 'Millimetre' },
+  { value: 'cm', label: 'Centimetre' },
+  { value: 'km', label: 'Kilometre' },
+  { value: 'lm', label: 'Linear metre' },
+  { value: 'kg', label: 'Kilogram' },
+  { value: 'ton', label: 'Tonne' },
+  { value: 'g', label: 'Gram' },
+  { value: 'l', label: 'Litre' },
+  { value: 'hr', label: 'Hour' },
+  { value: 'day', label: 'Day' },
+  { value: 'week', label: 'Week' },
+  { value: 'month', label: 'Month' },
+  { value: 'pcs', label: 'Pieces' },
+  { value: 'roll', label: 'Roll' },
+  { value: 'sheet', label: 'Sheet' },
+  { value: 'bag', label: 'Bag' },
+  { value: 'drum', label: 'Drum' },
+  { value: 'sum', label: 'Sum' },
+  { value: 'visit', label: 'Visit' },
+  { value: 'point', label: 'Point' },
+  { value: '%', label: 'Percent' },
+]
