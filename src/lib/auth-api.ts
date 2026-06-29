@@ -21,6 +21,30 @@ export type PlatformAdmin = {
   status: string
 }
 
+export type PlatformTenant = {
+  id: string
+  name: string
+  slug: string
+  status: 'active' | 'suspended' | 'cancelled'
+  owner_user_id: string | null
+  created_at: string
+  updated_at?: string
+}
+
+export type PlatformTenantMember = {
+  id: string
+  email: string
+  full_name: string
+  status: string
+  created_at: string
+  assignments: {
+    id: string
+    role: string
+    scope_type: string
+    scope_id: string | null
+  }[]
+}
+
 export type Me = {
   user: { id: string; email: string; full_name: string; status: string }
   tenant: { id: string; name: string; slug: string }
@@ -88,4 +112,91 @@ export async function platformLogout(token: string): Promise<void> {
     headers: { authorization: `Bearer ${token}` },
     credentials: 'include',
   }).catch(() => {})
+}
+
+function platformJsonHeaders(token: string) {
+  return {
+    'content-type': 'application/json',
+    authorization: `Bearer ${token}`,
+  }
+}
+
+export async function listPlatformTenants(
+  token: string
+): Promise<{ data: PlatformTenant[] }> {
+  const res = await fetch(`${BASE}/platform/tenants`, {
+    headers: { authorization: `Bearer ${token}` },
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function createPlatformTenant(
+  token: string,
+  body: { name: string; slug: string }
+): Promise<{ tenant: PlatformTenant }> {
+  const res = await fetch(`${BASE}/platform/tenants`, {
+    method: 'POST',
+    headers: platformJsonHeaders(token),
+    credentials: 'include',
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function updatePlatformTenant(
+  token: string,
+  tenantId: string,
+  body: Partial<Pick<PlatformTenant, 'name' | 'slug' | 'status'>>
+): Promise<{ tenant: PlatformTenant }> {
+  const res = await fetch(`${BASE}/platform/tenants/${tenantId}`, {
+    method: 'PATCH',
+    headers: platformJsonHeaders(token),
+    credentials: 'include',
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function cancelPlatformTenant(
+  token: string,
+  tenantId: string
+): Promise<{ tenant: PlatformTenant }> {
+  const res = await fetch(`${BASE}/platform/tenants/${tenantId}`, {
+    method: 'DELETE',
+    headers: { authorization: `Bearer ${token}` },
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function createPlatformTenantAdmin(
+  token: string,
+  tenantId: string,
+  body: { email: string; password: string; full_name: string }
+): Promise<{ user: { id: string; email: string; full_name: string; status: string } }> {
+  const res = await fetch(`${BASE}/platform/tenants/${tenantId}/admins`, {
+    method: 'POST',
+    headers: platformJsonHeaders(token),
+    credentials: 'include',
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function listPlatformTenantMembers(
+  token: string,
+  tenantId: string
+): Promise<{ data: PlatformTenantMember[] }> {
+  const res = await fetch(`${BASE}/platform/tenants/${tenantId}/members`, {
+    headers: { authorization: `Bearer ${token}` },
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
 }

@@ -24,6 +24,10 @@ const cookieOpts = {
   maxAge: config.REFRESH_TTL_S * 1000,
 }
 
+function normalizeTenantSlug(slug: string) {
+  return slug.trim().toLowerCase()
+}
+
 // Issue a platform session + first refresh token, return the access token.
 async function startSession(res: any, adminId: string, role: string, req: Authed) {
   const { raw, hash } = newRefreshToken()
@@ -149,7 +153,7 @@ platformRouter.post(
           .min(1)
           .regex(/^[a-z0-9-]+$/, 'lowercase letters, digits, hyphens only'),
       }),
-      req.body,
+      { ...req.body, slug: normalizeTenantSlug(req.body?.slug ?? '') },
     )
     const tenant = await withCtx(req.ctx, async (q) => {
       const t = await q(
@@ -177,6 +181,119 @@ platformRouter.get(
          FROM tenants ORDER BY created_at DESC`),
     )
     res.json({ data: r.rows, page: { next_cursor: null, has_more: false } })
+  }),
+)
+
+// GET /platform/tenants/:tenantId
+platformRouter.get(
+  '/tenants/:tenantId',
+  authenticatePlatform,
+  asyncHandler(async (req, res) => {
+    const r = await withCtx(req.ctx, (q) =>
+      q(
+        `SELECT id, name, slug, status, owner_user_id, created_at, updated_at
+         FROM tenants WHERE id = $1`,
+        [req.params.tenantId],
+      ),
+    )
+    if (!r.rowCount) throw errors.notFound('Tenant not found.')
+    res.json({ tenant: r.rows[0] })
+  }),
+)
+
+// PATCH /platform/tenants/:tenantId — update organization metadata/lifecycle.
+platformRouter.patch(
+  '/tenants/:tenantId',
+  authenticatePlatform,
+  asyncHandler(async (req, res) => {
+    const body = validate(
+      z.object({
+        name: z.string().min(1).optional(),
+        slug: z
+          .string()
+          .min(1)
+          .regex(/^[a-z0-9-]+$/, 'lowercase letters, digits, hyphens only')
+          .optional(),
+        status: z.enum(['active', 'suspended', 'cancelled']).optional(),
+      }),
+      typeof req.body?.slug === 'string'
+        ? { ...req.body, slug: normalizeTenantSlug(req.body.slug) }
+        : req.body,
+    )
+    const tenant = await withCtx(req.ctx, async (q) => {
+      const before = await q(`SELECT * FROM tenants WHERE id = $1`, [req.params.tenantId])
+      if (!before.rowCount) throw errors.notFound('Tenant not found.')
+      const r = await q(
+        `UPDATE tenants SET
+           name = COALESCE($2, name),
+           slug = COALESCE($3, slug),
+           status = COALESCE($4::tenant_status, status)
+         WHERE id = $1
+         RETURNING id, name, slug, status, owner_user_id, created_at, updated_at`,
+        [req.params.tenantId, body.name ?? null, body.slug ?? null, body.status ?? null],
+      )
+      await q(
+        `INSERT INTO audit_logs (tenant_id, actor_platform_id, action, entity_type, entity_id, before, after)
+         VALUES ($1,$2,'tenant.update','tenant',$1,$3,$4)`,
+        [req.params.tenantId, req.admin!.id, before.rows[0], r.rows[0]],
+      )
+      return r.rows[0]
+    }).catch((e) => {
+      if (e?.code === '23505') throw errors.conflict('A tenant with this slug already exists.')
+      throw e
+    })
+    res.json({ tenant })
+  }),
+)
+
+// DELETE /platform/tenants/:tenantId — lifecycle delete: mark cancelled.
+platformRouter.delete(
+  '/tenants/:tenantId',
+  authenticatePlatform,
+  asyncHandler(async (req, res) => {
+    const tenant = await withCtx(req.ctx, async (q) => {
+      const before = await q(`SELECT * FROM tenants WHERE id = $1`, [req.params.tenantId])
+      if (!before.rowCount) throw errors.notFound('Tenant not found.')
+      const r = await q(
+        `UPDATE tenants SET status = 'cancelled'
+         WHERE id = $1
+         RETURNING id, name, slug, status, owner_user_id, created_at, updated_at`,
+        [req.params.tenantId],
+      )
+      await q(
+        `INSERT INTO audit_logs (tenant_id, actor_platform_id, action, entity_type, entity_id, before, after)
+         VALUES ($1,$2,'tenant.cancel','tenant',$1,$3,$4)`,
+        [req.params.tenantId, req.admin!.id, before.rows[0], r.rows[0]],
+      )
+      return r.rows[0]
+    })
+    res.json({ tenant })
+  }),
+)
+
+// GET /platform/tenants/:tenantId/members — operator view of tenant users.
+platformRouter.get(
+  '/tenants/:tenantId/members',
+  authenticatePlatform,
+  asyncHandler(async (req, res) => {
+    const rows = await withCtx(req.ctx, async (q) => {
+      const t = await q(`SELECT id FROM tenants WHERE id = $1`, [req.params.tenantId])
+      if (!t.rowCount) throw errors.notFound('Tenant not found.')
+      const r = await q(
+        `SELECT u.id, u.email, u.full_name, u.status, u.created_at,
+                COALESCE(json_agg(json_build_object(
+                  'id', ra.id, 'role', r.key, 'scope_type', ra.scope_type, 'scope_id', ra.scope_id
+                )) FILTER (WHERE ra.id IS NOT NULL), '[]') AS assignments
+         FROM users u
+         LEFT JOIN role_assignments ra ON ra.user_id = u.id
+         LEFT JOIN roles r ON r.id = ra.role_id
+         WHERE u.tenant_id = $1
+         GROUP BY u.id ORDER BY u.created_at`,
+        [req.params.tenantId],
+      )
+      return r.rows
+    })
+    res.json({ data: rows, page: { next_cursor: null, has_more: false } })
   }),
 )
 
