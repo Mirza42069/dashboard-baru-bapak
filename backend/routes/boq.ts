@@ -85,17 +85,7 @@ boqRouter.post(
           b.clone_from, projectId,
         ])
         if (!src.rowCount) throw errors.unprocessable('clone_from is not a version of this project.')
-        // copy items (parent_id wired in a second pass by code, since ids change)
-        await q(
-          `INSERT INTO boq_items
-             (tenant_id, project_id, boq_version_id, code, description, unit, quantity, unit_rate,
-              weight, weight_source, planned_start, planned_finish, distribution, progress_mode, sort_order)
-           SELECT tenant_id, project_id, $1, code, description, unit, quantity, unit_rate,
-                  weight, weight_source, planned_start, planned_finish, distribution, progress_mode, sort_order
-           FROM boq_items WHERE boq_version_id = $2 AND deleted_at IS NULL`,
-          [newId, b.clone_from],
-        )
-        await wireParentsFromClone(q, newId, b.clone_from)
+        await cloneItems(q, req.user!.tid, projectId, newId, b.clone_from)
       }
       return v.rows[0]
     })
@@ -169,7 +159,8 @@ const itemInput = z.object({
   code: z.string().min(1),
   description: z.string().min(1),
   unit: z.string().nullish(),
-  parent_code: z.string().nullish(),
+  parent_id: z.string().uuid().nullish(),
+  parent_code: z.string().nullish(), // bulk-import only; single create uses parent_id
   quantity: z.number().nullish(),
   unit_rate: z.number().nullish(),
   weight: z.number().min(0).nullish(),
@@ -182,15 +173,18 @@ const itemInput = z.object({
 })
 type ItemInput = z.infer<typeof itemInput>
 
-async function insertItem(q: Querier, tid: string, projectId: string, versionId: string, it: ItemInput) {
+async function insertItem(
+  q: Querier, tid: string, projectId: string, versionId: string, it: ItemInput,
+  parentId: string | null,
+) {
   const r = await q(
     `INSERT INTO boq_items
-       (tenant_id, project_id, boq_version_id, code, description, unit, quantity, unit_rate,
+       (tenant_id, project_id, boq_version_id, parent_id, code, description, unit, quantity, unit_rate,
         weight, weight_source, planned_start, planned_finish, distribution, progress_mode, sort_order)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
      RETURNING ${ITEM_COLS}`,
     [
-      tid, projectId, versionId, it.code, it.description, it.unit ?? null, it.quantity ?? null,
+      tid, projectId, versionId, parentId, it.code, it.description, it.unit ?? null, it.quantity ?? null,
       it.unit_rate ?? null, it.weight ?? 0, it.weight_source, it.planned_start ?? null,
       it.planned_finish ?? null, it.distribution, it.progress_mode, it.sort_order ?? 0,
     ],
@@ -198,23 +192,44 @@ async function insertItem(q: Querier, tid: string, projectId: string, versionId:
   return r.rows[0]
 }
 
-// After cloning items into a new version, re-point parent_id by matching codes.
-async function wireParentsFromClone(q: Querier, versionId: string, fromVersionId: string) {
-  await q(
-    `UPDATE boq_items n SET parent_id = p.id
-     FROM boq_items o
-     JOIN boq_items op ON op.id = o.parent_id
-     JOIN boq_items p  ON p.boq_version_id = $1 AND p.code = op.code
-     WHERE o.boq_version_id = $2 AND o.deleted_at IS NULL
-       AND n.boq_version_id = $1 AND n.code = o.code`,
-    [versionId, fromVersionId],
+// Deep-copy items into a new version, remapping parent_id via an old->new id map.
+// (Codes are only unique per parent, so we can't match the tree by code.)
+async function cloneItems(
+  q: Querier, tid: string, projectId: string, versionId: string, fromVersionId: string,
+) {
+  const src = await q<any>(
+    `SELECT * FROM boq_items WHERE boq_version_id = $1 AND deleted_at IS NULL
+     ORDER BY sort_order, code`,
+    [fromVersionId],
   )
+  const idMap = new Map<string, string>()
+  let pending = src.rows
+  while (pending.length) {
+    const ready = pending.filter((r) => !r.parent_id || idMap.has(r.parent_id))
+    if (!ready.length) break // orphan/cycle guard — stop rather than loop forever
+    for (const r of ready) {
+      const row = await insertItem(q, tid, projectId, versionId, r, r.parent_id ? idMap.get(r.parent_id)! : null)
+      idMap.set(r.id, row.id)
+    }
+    pending = pending.filter((r) => !idMap.has(r.id))
+  }
 }
 
-async function resolveParent(q: Querier, versionId: string, parentCode?: string | null) {
+// parent_id given directly (single create): must be an item in the same version.
+async function assertParentInVersion(q: Querier, versionId: string, parentId: string) {
+  const r = await q(
+    `SELECT 1 FROM boq_items WHERE id = $1 AND boq_version_id = $2 AND deleted_at IS NULL`,
+    [parentId, versionId],
+  )
+  if (!r.rowCount) throw errors.unprocessable('parent_id is not an item in this version.')
+  return parentId
+}
+
+// parent_code (bulk import only): ambiguous if codes repeat across parents — picks one.
+async function resolveParentCode(q: Querier, versionId: string, parentCode?: string | null) {
   if (!parentCode) return null
   const r = await q<{ id: string }>(
-    `SELECT id FROM boq_items WHERE boq_version_id = $1 AND code = $2 AND deleted_at IS NULL`,
+    `SELECT id FROM boq_items WHERE boq_version_id = $1 AND code = $2 AND deleted_at IS NULL LIMIT 1`,
     [versionId, parentCode],
   )
   if (!r.rowCount) throw errors.unprocessable(`parent_code '${parentCode}' not found in this version.`)
@@ -250,16 +265,10 @@ boqRouter.post(
       const ver = await q<{ project_id: string }>(
         `SELECT project_id FROM boq_versions WHERE id = $1`, [versionId],
       )
-      const parentId = await resolveParent(q, versionId, it.parent_code)
-      const row = await insertItem(q, req.user!.tid, ver.rows[0].project_id, versionId, it)
-      if (parentId) {
-        const r = await q(
-          `UPDATE boq_items SET parent_id = $2 WHERE id = $1 RETURNING ${ITEM_COLS}`,
-          [row.id, parentId],
-        )
-        return r.rows[0]
-      }
-      return row
+      const parentId = it.parent_id
+        ? await assertParentInVersion(q, versionId, it.parent_id)
+        : await resolveParentCode(q, versionId, it.parent_code)
+      return insertItem(q, req.user!.tid, ver.rows[0].project_id, versionId, it, parentId)
     })
     res.status(201).json({ item: out })
   }),
@@ -280,8 +289,10 @@ boqRouter.put(
       )
       const projectId = ver.rows[0].project_id
       await q(`DELETE FROM boq_items WHERE boq_version_id = $1`, [versionId])
-      for (const it of items) await insertItem(q, req.user!.tid, projectId, versionId, it)
-      // wire parents by parent_code (all rows now exist in this version)
+      for (const it of items) await insertItem(q, req.user!.tid, projectId, versionId, it, null)
+      // wire parents by parent_code (all rows now exist in this version).
+      // ponytail: assumes parent codes are unique within the version; ambiguous
+      // duplicate codes pick an arbitrary match. Fine for the importer's flat input.
       const withParents = items.filter((it) => it.parent_code)
       if (withParents.length) {
         await q(

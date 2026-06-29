@@ -1,46 +1,30 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link, useParams } from '@tanstack/react-router'
-import {
-  Check,
-  ChevronDown,
-  Download,
-  Pencil,
-  Plus,
-  Upload,
-} from 'lucide-react'
+import { GripVertical, Pencil, Plus, Upload } from 'lucide-react'
 import { toast } from 'sonner'
-import { getProject, type Project as ApiProject } from '@/lib/auth-api'
+import {
+  activateBoqVersion,
+  createBoqItem,
+  createBoqVersion,
+  getProject,
+  listBoqItems,
+  listBoqVersions,
+  patchBoqItem,
+  recalcBoqWeights,
+  type BoqItem,
+  type BoqItemInput,
+  type BoqVersion,
+  type Project as ApiProject,
+} from '@/lib/auth-api'
 import { useAuthStore } from '@/stores/auth-store'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  boqSeedLeaves,
-  computeTotals,
-  gbp,
-  leafStatus,
-  type BoqLeaf,
-} from './boq'
+import { gbp } from './boq'
 import { EmptyState, MetricCard, Panel, StatusPill } from './components'
 import { systems } from './data'
-
-const GRID = '74px 1.9fr 52px 100px 96px 104px 168px 104px'
 
 const workPackages: { name: string; pct: number }[] = []
 
@@ -55,17 +39,6 @@ const documents: {
   size: string
   updated: string
 }[] = []
-
-type Revision = {
-  rev: string
-  status: string
-  tone: 'good' | 'muted'
-  note: string
-  date: string
-  by: string
-}
-
-const seedRevisions: Revision[] = []
 
 const projectTabs = [
   { value: 'overview', label: 'Overview' },
@@ -192,7 +165,7 @@ export function ProjectDetailPage() {
           <OverviewTab project={project} />
         </TabsContent>
         <TabsContent value='boq'>
-          <BoqTab projectName={project.name} />
+          <BoqTab projectId={project.id} />
         </TabsContent>
         <TabsContent value='progress'>
           <ProgressTab />
@@ -303,114 +276,255 @@ function WorkPackages() {
   )
 }
 
-function BoqTab({ projectName }: { projectName: string }) {
-  const [stage, setStage] = useState<'empty' | 'import' | 'data'>(
-    boqSeedLeaves.length ? 'data' : 'empty'
+const num = (v: string | number | null | undefined) =>
+  v == null ? 0 : Number(v)
+const errMsg = (e: unknown) =>
+  e instanceof Error ? e.message : 'Something went wrong.'
+
+const BOQ_GRID = '90px minmax(160px,1.8fr) 60px 108px 128px 140px 84px'
+
+type Section = { header: BoqItem | null; leaves: BoqItem[] }
+
+// Flat boq_items -> 2-level sections: a parent item (one referenced as someone's
+// parent_id) is a section header; everything else is a leaf, grouped under its
+// parent or collected as "Ungrouped".
+function buildSections(items: BoqItem[]): Section[] {
+  const sorted = [...items].sort(
+    (a, b) =>
+      a.sort_order - b.sort_order ||
+      a.code.localeCompare(b.code, undefined, { numeric: true })
   )
-  const [mode, setMode] = useState<'active' | 'draft'>('active')
-  const [subTab, setSubTab] = useState<'quantities' | 'revisions' | 'field'>(
-    'quantities'
+  const parentIds = new Set(
+    sorted.filter((i) => i.parent_id).map((i) => i.parent_id as string)
   )
-  const [leaves, setLeaves] = useState<BoqLeaf[]>(boqSeedLeaves)
-  const [revisions, setRevisions] = useState<Revision[]>(seedRevisions)
+  const isHeader = (i: BoqItem) => parentIds.has(i.id)
+  const grouped = (i: BoqItem) => i.parent_id != null && parentIds.has(i.parent_id)
+  const sections: Section[] = sorted
+    .filter(isHeader)
+    .map((h) => ({
+      header: h,
+      leaves: sorted.filter((i) => i.parent_id === h.id && !isHeader(i)),
+    }))
+  const orphans = sorted.filter((i) => !isHeader(i) && !grouped(i))
+  if (orphans.length) sections.push({ header: null, leaves: orphans })
+  return sections
+}
 
-  if (stage === 'empty')
-    return (
-      <BoqEmpty
-        onImport={() => setStage('import')}
-        onScratch={() => setStage('data')}
-      />
-    )
-  if (stage === 'import')
-    return (
-      <BoqImport
-        onCancel={() => setStage('data')}
-        onFinish={() => setStage('data')}
-      />
-    )
+// Move dragId to sit where targetId currently is, within an ordered id list.
+function moveBefore(ids: string[], dragId: string, targetId: string) {
+  const without = ids.filter((x) => x !== dragId)
+  const at = without.indexOf(targetId)
+  without.splice(at < 0 ? without.length : at, 0, dragId)
+  return without
+}
 
-  const activeRev = revisions.find((r) => r.status === 'Active')?.rev ?? '2'
-  const nextRev = String(Number(activeRev) + 1)
+function BoqTab({ projectId }: { projectId: string }) {
+  const { auth } = useAuthStore()
+  const token = auth.accessToken
+  const [versions, setVersions] = useState<BoqVersion[]>([])
+  const [currentId, setCurrentId] = useState<string | null>(null)
+  const [items, setItems] = useState<BoqItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [subTab, setSubTab] = useState<'quantities' | 'revisions'>('quantities')
 
-  const saveRevision = () => {
-    setRevisions((prev) => [
-      {
-        rev: nextRev,
-        status: 'Active',
-        tone: 'good',
-        note: 'Quantity & rate revision',
-        date: 'Today',
-        by: 'A. Okafor',
-      },
-      ...prev.map((r) => ({
-        ...r,
-        status: r.status === 'Active' ? 'Superseded' : r.status,
-        tone: 'muted' as const,
-      })),
-    ])
-    setMode('active')
+  const loadItems = useCallback(
+    async (versionId: string) => {
+      if (!token) return
+      const { data } = await listBoqItems(token, versionId)
+      setItems(data)
+    },
+    [token]
+  )
+
+  useEffect(() => {
+    if (!token) return
+    let cancelled = false
+    void (async () => {
+      setLoading(true)
+      try {
+        const { data } = await listBoqVersions(token, projectId)
+        if (cancelled) return
+        setVersions(data)
+        const pick = data.find((v) => v.status === 'active') ?? data[0] ?? null
+        setCurrentId(pick?.id ?? null)
+        setItems(pick ? (await listBoqItems(token, pick.id)).data : [])
+      } catch (err) {
+        if (!cancelled) toast.error(errMsg(err))
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [token, projectId])
+
+  const current = versions.find((v) => v.id === currentId) ?? null
+  const draft = current?.status === 'draft'
+
+  const refresh = async (selectId?: string) => {
+    if (!token) return
+    const { data } = await listBoqVersions(token, projectId)
+    setVersions(data)
+    const pick =
+      (selectId ? data.find((v) => v.id === selectId) : undefined) ??
+      data.find((v) => v.status === 'active') ??
+      data[0] ??
+      null
+    setCurrentId(pick?.id ?? null)
+    if (pick) await loadItems(pick.id)
+    else setItems([])
   }
-  const discardDraft = () => {
-    setLeaves(boqSeedLeaves)
-    setMode('active')
+
+  const run = async (fn: () => Promise<void>) => {
+    if (!token || busy) return
+    setBusy(true)
+    try {
+      await fn()
+    } catch (err) {
+      toast.error(errMsg(err))
+    } finally {
+      setBusy(false)
+    }
   }
+
+  const createFirst = () =>
+    run(async () => {
+      const { version } = await createBoqVersion(token!, projectId, {
+        title: 'Rev 1',
+      })
+      await refresh(version.id)
+      setSubTab('quantities')
+      toast.success('BoQ draft created — add line items, then activate.')
+    })
+
+  const revise = () =>
+    run(async () => {
+      const existing = versions.find((v) => v.status === 'draft')
+      if (existing) {
+        setCurrentId(existing.id)
+        await loadItems(existing.id)
+        setSubTab('quantities')
+        return
+      }
+      const active = versions.find((v) => v.status === 'active') ?? current
+      const nextNo = Math.max(0, ...versions.map((v) => v.version_no)) + 1
+      const { version } = await createBoqVersion(token!, projectId, {
+        title: `Rev ${nextNo}`,
+        clone_from: active?.id ?? null,
+      })
+      await refresh(version.id)
+      setSubTab('quantities')
+    })
+
+  const activate = () =>
+    run(async () => {
+      await recalcBoqWeights(token!, current!.id)
+      await activateBoqVersion(token!, current!.id)
+      await refresh()
+      toast.success('Baseline activated.')
+    })
+
+  const addItem = (input: BoqItemInput) =>
+    run(async () => {
+      await createBoqItem(token!, current!.id, input)
+      await loadItems(current!.id)
+    })
+
+  const addSection = (input: { code: string; description: string }) =>
+    run(async () => {
+      await createBoqItem(token!, current!.id, { ...input, parent_id: null })
+      await loadItems(current!.id)
+    })
+
+  // Persist a drag-reordered group by rewriting its members' sort_order.
+  const reorder = (orderedIds: string[]) =>
+    run(async () => {
+      await Promise.all(
+        orderedIds.map((id, idx) => {
+          const it = items.find((i) => i.id === id)
+          return it && it.sort_order !== idx
+            ? patchBoqItem(token!, id, { sort_order: idx })
+            : null
+        })
+      )
+      await loadItems(current!.id)
+    })
+
+  const commitCell = (
+    itemId: string,
+    field: 'quantity' | 'unit_rate',
+    value: number
+  ) =>
+    run(async () => {
+      const { item } = await patchBoqItem(token!, itemId, { [field]: value })
+      setItems((prev) => prev.map((i) => (i.id === item.id ? item : i)))
+    })
+
+  if (loading) return <EmptyState message='Loading bill of quantities…' />
+  if (!current) return <BoqEmpty onCreate={createFirst} busy={busy} />
+
+  const sections = buildSections(items)
+  const total = sections.reduce(
+    (s, sec) =>
+      s + sec.leaves.reduce((t, l) => t + num(l.quantity) * num(l.unit_rate), 0),
+    0
+  )
 
   return (
     <div>
-      {mode === 'active' ? (
-        <div className='mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-card p-3'>
-          <div className='flex items-center gap-3'>
-            <span className='rounded-md bg-muted px-2 py-1 text-[11px] font-semibold text-foreground'>
-              Rev {activeRev}
-            </span>
-            <StatusPill tone='good'>Active</StatusPill>
-            <span className='text-xs text-muted-foreground'>
-              Current revision
-            </span>
-          </div>
-          <div className='flex gap-2'>
-            <ExportDialog />
+      <div
+        className={cn(
+          'mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3',
+          draft ? 'bg-muted/60' : 'bg-card'
+        )}
+      >
+        <div className='flex items-center gap-3'>
+          <span
+            className={cn(
+              'rounded-md px-2 py-1 text-[11px] font-semibold',
+              draft ? 'bg-foreground text-background' : 'bg-muted text-foreground'
+            )}
+          >
+            {draft ? 'Draft ' : ''}Rev {current.version_no}
+          </span>
+          <StatusPill
+            tone={
+              current.status === 'active' ? 'good' : draft ? 'risk' : 'muted'
+            }
+          >
+            {current.status}
+          </StatusPill>
+          <span className='text-xs text-muted-foreground'>
+            {draft ? 'Quantities & rates unlocked' : current.title}
+          </span>
+        </div>
+        <div className='flex gap-2'>
+          {draft ? (
             <Button
               size='sm'
               className='rounded-md text-xs'
-              onClick={() => setMode('draft')}
+              disabled={busy}
+              onClick={activate}
+            >
+              Activate baseline
+            </Button>
+          ) : (
+            <Button
+              size='sm'
+              className='rounded-md text-xs'
+              disabled={busy}
+              onClick={revise}
             >
               <Pencil className='size-3.5' /> Revise BoQ
             </Button>
-          </div>
+          )}
         </div>
-      ) : (
-        <div className='mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-muted/60 p-3'>
-          <div className='flex items-center gap-3'>
-            <span className='rounded-md bg-foreground px-2 py-1 text-[11px] font-semibold text-background'>
-              Draft Rev {nextRev}
-            </span>
-            <span className='text-xs text-foreground'>
-              Quantities & rates unlocked · progress locked while drafting
-            </span>
-          </div>
-          <div className='flex gap-2'>
-            <Button
-              variant='outline'
-              size='sm'
-              className='rounded-md text-xs'
-              onClick={discardDraft}
-            >
-              Discard
-            </Button>
-            <Button
-              size='sm'
-              className='rounded-md text-xs'
-              onClick={saveRevision}
-            >
-              Save as Rev {nextRev}
-            </Button>
-          </div>
-        </div>
-      )}
+      </div>
 
       <div className='mb-3 flex gap-1'>
-        {(['quantities', 'revisions', 'field'] as const).map((s) => (
+        {(['quantities', 'revisions'] as const).map((s) => (
           <button
             key={s}
             onClick={() => setSubTab(s)}
@@ -421,20 +535,45 @@ function BoqTab({ projectName }: { projectName: string }) {
                 : 'text-muted-foreground hover:text-foreground'
             )}
           >
-            {s === 'field' ? 'Field update' : s}
+            {s}
           </button>
         ))}
       </div>
 
-      {subTab === 'quantities' && (
-        <QuantitiesGrid mode={mode} leaves={leaves} setLeaves={setLeaves} />
-      )}
-      {subTab === 'revisions' && <RevisionHistory revisions={revisions} />}
-      {subTab === 'field' && (
-        <FieldUpdate
-          projectName={projectName}
-          leaves={leaves}
-          setLeaves={setLeaves}
+      {subTab === 'quantities' ? (
+        <>
+          <BoqGrid
+            sections={sections}
+            total={total}
+            draft={draft}
+            busy={busy}
+            onCommit={commitCell}
+            onReorder={reorder}
+          />
+          {draft && (
+            <AddItemForm
+              sections={sections}
+              onAdd={addItem}
+              onAddSection={addSection}
+              busy={busy}
+            />
+          )}
+          <p className='mt-3 text-[11px] text-muted-foreground'>
+            {draft && 'Drag the ⠿ handle to reorder. '}% complete &amp; field
+            progress arrive with the reporting-period API (not yet wired).
+          </p>
+        </>
+      ) : (
+        <RevisionHistory
+          versions={versions}
+          currentId={current.id}
+          onView={(id) =>
+            void (async () => {
+              setCurrentId(id)
+              await loadItems(id)
+              setSubTab('quantities')
+            })()
+          }
         />
       )}
     </div>
@@ -442,11 +581,11 @@ function BoqTab({ projectName }: { projectName: string }) {
 }
 
 function BoqEmpty({
-  onImport,
-  onScratch,
+  onCreate,
+  busy,
 }: {
-  onImport: () => void
-  onScratch: () => void
+  onCreate: () => void
+  busy: boolean
 }) {
   return (
     <div className='rounded-lg border border-border bg-card p-10 text-center'>
@@ -457,198 +596,93 @@ function BoqEmpty({
         No Bill of Quantities yet
       </div>
       <p className='mx-auto mt-1.5 mb-5 max-w-md text-xs text-muted-foreground'>
-        Start from an existing priced spreadsheet, or build the BoQ from
-        scratch. Most teams import their tender BoQ, then adjust.
+        Create the first draft, add sections & line items, then activate it as
+        the baseline.
       </p>
-      <div className='flex flex-wrap justify-center gap-3'>
-        <button
-          onClick={onImport}
-          className='flex w-52 flex-col items-center gap-1.5 rounded-lg border border-border bg-muted/50 p-4 transition hover:bg-muted'
-        >
-          <Upload className='size-5 text-muted-foreground' />
-          <span className='text-sm font-medium text-foreground'>
-            Import from Excel
-          </span>
-          <span className='text-[11px] text-muted-foreground'>
-            .xlsx / .csv · recommended
-          </span>
-        </button>
-        <button
-          onClick={onScratch}
-          className='flex w-52 flex-col items-center gap-1.5 rounded-lg border border-dashed border-border p-4 transition hover:bg-muted/40'
-        >
-          <Plus className='size-5 text-muted-foreground' />
-          <span className='text-sm font-medium text-foreground'>
-            Create from scratch
-          </span>
-          <span className='text-[11px] text-muted-foreground'>
-            add sections & line items
-          </span>
-        </button>
-      </div>
+      <Button
+        size='sm'
+        className='rounded-md text-xs'
+        disabled={busy}
+        onClick={onCreate}
+      >
+        <Plus className='size-3.5' /> Create BoQ draft
+      </Button>
     </div>
   )
 }
 
-const importMappings: {
-  src: string
-  field: string
-  match: string
-  tone: 'good' | 'risk'
-}[] = []
-
-function BoqImport({
-  onCancel,
-  onFinish,
+function BoqGrid({
+  sections,
+  total,
+  draft,
+  busy,
+  onCommit,
+  onReorder,
 }: {
-  onCancel: () => void
-  onFinish: () => void
-}) {
-  return (
-    <div>
-      <div className='mb-5 flex items-center gap-3'>
-        <Step n={1} label='Upload file' />
-        <div className='h-px w-8 bg-border' />
-        <Step n={2} label='Map columns' />
-      </div>
-      <div className='grid gap-4 lg:grid-cols-[300px_1fr]'>
-        <div className='space-y-3'>
-          <div className='rounded-lg border-2 border-dashed border-border bg-muted/40 p-6 text-center'>
-            <div className='mx-auto mb-3 grid size-10 place-items-center rounded-lg border border-border bg-card text-muted-foreground'>
-              <Upload className='size-4' />
-            </div>
-            <div className='text-sm font-medium text-foreground'>
-              Drop Excel / CSV here
-            </div>
-            <div className='mb-3 text-[11px] text-muted-foreground'>
-              .xlsx, .xls, .csv up to 20MB
-            </div>
-            <Button size='sm' className='rounded-md text-xs'>
-              Browse files
-            </Button>
-          </div>
-          <div className='flex items-center gap-3 rounded-md border border-border bg-card p-2.5'>
-            <div className='grid size-7 place-items-center rounded bg-muted text-[10px] font-semibold text-muted-foreground'>
-              XLS
-            </div>
-            <div className='flex-1'>
-              <div className='text-xs font-medium text-foreground'>
-                Selected file
-              </div>
-              <div className='text-[11px] text-muted-foreground'>
-                142 rows detected
-              </div>
-            </div>
-            <Check className='size-4 text-emerald-600' />
-          </div>
-        </div>
-        <Panel
-          title='Map spreadsheet columns to BoQ fields'
-          description='Auto-matched where possible. Adjust any mapping below.'
-        >
-          <div
-            className='grid gap-2 border-b border-border pb-2 text-[10px] tracking-wide text-muted-foreground uppercase'
-            style={{ gridTemplateColumns: '1fr 28px 1fr 80px' }}
-          >
-            <div>Source column</div>
-            <div />
-            <div>BoQ field</div>
-            <div>Match</div>
-          </div>
-          {importMappings.length ? (
-            importMappings.map((m) => (
-              <div
-                key={m.src}
-                className='grid items-center gap-2 border-b border-border py-2.5'
-                style={{ gridTemplateColumns: '1fr 28px 1fr 80px' }}
-              >
-                <div className='rounded border border-border bg-muted px-2 py-1.5 font-mono text-[11px] text-muted-foreground'>
-                  {m.src}
-                </div>
-                <div className='text-center text-muted-foreground'>→</div>
-                <div className='flex justify-between rounded-md border border-border px-2.5 py-1.5 text-xs text-foreground'>
-                  <span>{m.field}</span>
-                  <ChevronDown className='size-3 text-muted-foreground' />
-                </div>
-                <StatusPill tone={m.tone}>{m.match}</StatusPill>
-              </div>
-            ))
-          ) : (
-            <EmptyState message='No column mappings available.' />
-          )}
-          <div className='mt-4 flex justify-end gap-2'>
-            <Button
-              variant='outline'
-              size='sm'
-              className='rounded-md text-xs'
-              onClick={onCancel}
-            >
-              Cancel
-            </Button>
-            <Button size='sm' className='rounded-md text-xs' onClick={onFinish}>
-              Finish import →
-            </Button>
-          </div>
-        </Panel>
-      </div>
-    </div>
-  )
-}
-
-function Step({ n, label }: { n: number; label: string }) {
-  return (
-    <div className='flex items-center gap-2'>
-      <span className='grid size-6 place-items-center rounded-full bg-primary text-[11px] text-primary-foreground'>
-        {n}
-      </span>
-      <span className='text-xs font-medium text-foreground'>{label}</span>
-    </div>
-  )
-}
-
-function QuantitiesGrid({
-  mode,
-  leaves,
-  setLeaves,
-}: {
-  mode: 'active' | 'draft'
-  leaves: BoqLeaf[]
-  setLeaves: React.Dispatch<React.SetStateAction<BoqLeaf[]>>
+  sections: Section[]
+  total: number
+  draft: boolean
+  busy: boolean
+  onCommit: (id: string, field: 'quantity' | 'unit_rate', value: number) => void
+  onReorder: (orderedIds: string[]) => void
 }) {
   const [editing, setEditing] = useState<{
     id: string
-    field: 'qty' | 'rate' | 'pct'
+    field: 'quantity' | 'unit_rate'
   } | null>(null)
-  const totals = computeTotals(leaves)
+  // Drag-reorder within a group: 'S' = section headers, `L:<parent>` = leaves.
+  const [drag, setDrag] = useState<{ id: string; group: string } | null>(null)
 
-  const setField = (id: string, field: 'qty' | 'rate' | 'pct', value: number) =>
-    setLeaves((prev) =>
-      prev.map((l) =>
-        l.id === id
-          ? {
-              ...l,
-              [field]:
-                field === 'pct'
-                  ? Math.max(0, Math.min(100, value))
-                  : Math.max(0, value),
-            }
-          : l
-      )
+  const groupIds = (group: string): string[] => {
+    if (group === 'S')
+      return sections.map((s) => s.header?.id).filter(Boolean) as string[]
+    const sec = sections.find((s) => `L:${s.header?.id ?? 'orphan'}` === group)
+    return sec ? sec.leaves.map((l) => l.id) : []
+  }
+  const drop = (group: string, targetId: string) => {
+    if (!drag || drag.group !== group || drag.id === targetId) return setDrag(null)
+    onReorder(moveBefore(groupIds(group), drag.id, targetId))
+    setDrag(null)
+  }
+  const dragProps = (id: string, group: string) =>
+    !draft
+      ? {}
+      : {
+          draggable: true,
+          onDragStart: () => setDrag({ id, group }),
+          onDragEnd: () => setDrag(null),
+        }
+  const dropProps = (group: string, targetId: string) =>
+    !draft
+      ? {}
+      : {
+          onDragOver: (e: React.DragEvent) =>
+            drag?.group === group && e.preventDefault(),
+          onDrop: () => drop(group, targetId),
+        }
+
+  if (!sections.length)
+    return (
+      <EmptyState
+        message={
+          draft
+            ? 'No line items yet — add a section, then items below.'
+            : 'This version has no line items.'
+        }
+      />
     )
 
-  const editable = (field: 'qty' | 'rate' | 'pct') =>
-    mode === 'draft' ? field === 'qty' || field === 'rate' : field === 'pct'
-
-  const numCell = (l: BoqLeaf, field: 'qty' | 'rate') => {
-    const isEditing = editing?.id === l.id && editing.field === field
-    if (editable(field) && isEditing)
+  const cell = (l: BoqItem, field: 'quantity' | 'unit_rate') => {
+    const isEditing = draft && editing?.id === l.id && editing.field === field
+    if (isEditing)
       return (
         <input
           autoFocus
           type='number'
-          defaultValue={l[field]}
+          defaultValue={num(l[field])}
+          disabled={busy}
           onBlur={(e) => {
-            setField(l.id, field, Number(e.target.value))
+            onCommit(l.id, field, Number(e.target.value))
             setEditing(null)
           }}
           onKeyDown={(e) => {
@@ -660,406 +694,390 @@ function QuantitiesGrid({
       )
     return (
       <div
-        onClick={() => editable(field) && setEditing({ id: l.id, field })}
+        onClick={() => draft && setEditing({ id: l.id, field })}
         className={cn(
           'flex h-full items-center justify-end px-2 font-mono text-xs',
-          editable(field)
-            ? 'cursor-pointer hover:bg-muted'
-            : 'text-muted-foreground'
+          draft ? 'cursor-pointer hover:bg-muted' : 'text-muted-foreground'
         )}
       >
-        {field === 'rate' ? l.rate.toFixed(2) : l.qty.toLocaleString('en-GB')}
+        {field === 'unit_rate'
+          ? num(l.unit_rate).toFixed(2)
+          : num(l.quantity).toLocaleString('en-GB')}
       </div>
     )
   }
 
   return (
     <div className='overflow-x-auto rounded-lg border border-border bg-card'>
-      <div className='min-w-[920px]'>
+      <div className='min-w-[860px]'>
         <div
           className='grid border-b border-border bg-muted/60 text-[10px] tracking-wide text-muted-foreground uppercase'
-          style={{ gridTemplateColumns: GRID }}
+          style={{ gridTemplateColumns: BOQ_GRID }}
         >
           <div className='p-2.5'>Code</div>
           <div className='p-2.5'>Description</div>
           <div className='p-2.5 text-center'>Unit</div>
-          <div className='p-2.5 text-right'>
-            Qty{mode === 'active' && ' 🔒'}
-          </div>
-          <div className='p-2.5 text-right'>
-            Rate{mode === 'active' && ' 🔒'}
-          </div>
+          <div className='p-2.5 text-right'>Qty{!draft && ' 🔒'}</div>
+          <div className='p-2.5 text-right'>Rate{!draft && ' 🔒'}</div>
           <div className='p-2.5 text-right'>Amount</div>
-          <div className='p-2.5'>% Complete{mode === 'draft' && ' 🔒'}</div>
-          <div className='p-2.5'>Status</div>
+          <div className='p-2.5 text-right'>Weight</div>
         </div>
 
-        {totals.sections.map((sec) => (
-          <div key={sec.section.id}>
-            <div className='flex items-center justify-between bg-muted/40 px-2.5 py-2'>
-              <div className='flex items-center gap-2 text-xs font-semibold text-foreground'>
-                <span className='grid size-5 place-items-center rounded bg-muted text-[10px] text-muted-foreground'>
-                  {sec.section.num}
-                </span>
-                <span>{sec.section.name}</span>
-              </div>
-              <div className='flex items-center gap-3'>
+        {sections.map((sec, idx) => {
+          const amt = sec.leaves.reduce(
+            (t, l) => t + num(l.quantity) * num(l.unit_rate),
+            0
+          )
+          const wt = sec.leaves.reduce((t, l) => t + num(l.weight), 0)
+          return (
+            <div key={sec.header?.id ?? `orphan-${idx}`}>
+              <div
+                className={cn(
+                  'flex items-center justify-between bg-muted/40 px-2.5 py-2',
+                  draft && sec.header && 'cursor-grab',
+                  drag?.id === sec.header?.id && 'opacity-50'
+                )}
+                {...(sec.header ? dragProps(sec.header.id, 'S') : {})}
+                {...(sec.header ? dropProps('S', sec.header.id) : {})}
+              >
+                <div className='flex items-center gap-2 text-xs font-semibold text-foreground'>
+                  {sec.header ? (
+                    <>
+                      {draft && (
+                        <GripVertical className='size-3.5 text-muted-foreground' />
+                      )}
+                      <span className='grid place-items-center rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground'>
+                        {sec.header.code}
+                      </span>
+                      <span>{sec.header.description}</span>
+                    </>
+                  ) : (
+                    <span className='text-muted-foreground'>Ungrouped items</span>
+                  )}
+                </div>
                 <span className='text-[11px] text-muted-foreground'>
                   {sec.leaves.length} items
                 </span>
-                <Progress value={sec.pct} className='h-1.5 w-20 bg-muted' />
-                <span className='w-8 text-right font-mono text-[11px] font-semibold text-foreground'>
-                  {sec.pct}%
-                </span>
               </div>
-            </div>
 
-            {sec.leaves.map((l) => {
-              const st = leafStatus(l.pct)
-              return (
+              {sec.leaves.map((l) => {
+                const group = `L:${sec.header?.id ?? 'orphan'}`
+                return (
                 <div
                   key={l.id}
-                  className='grid items-stretch border-b border-border/60 text-xs'
-                  style={{ gridTemplateColumns: GRID }}
+                  className={cn(
+                    'grid items-stretch border-b border-border/60 text-xs',
+                    drag?.id === l.id && 'opacity-50'
+                  )}
+                  style={{ gridTemplateColumns: BOQ_GRID }}
+                  {...dropProps(group, l.id)}
                 >
-                  <div className='p-2.5 font-mono text-[11px] text-muted-foreground'>
+                  <div
+                    className={cn(
+                      'flex items-center gap-1 p-2.5 font-mono text-[11px] text-muted-foreground',
+                      draft && 'cursor-grab'
+                    )}
+                    {...dragProps(l.id, group)}
+                  >
+                    {draft && <GripVertical className='size-3.5' />}
                     {l.code}
                   </div>
-                  <div className='p-2.5 text-foreground'>{l.desc}</div>
+                  <div className='p-2.5 text-foreground'>{l.description}</div>
                   <div className='p-2.5 text-center text-muted-foreground'>
-                    {l.unit}
+                    {l.unit ?? '—'}
                   </div>
                   <div className='border-l border-border/50'>
-                    {numCell(l, 'qty')}
+                    {cell(l, 'quantity')}
                   </div>
                   <div className='border-l border-border/50'>
-                    {numCell(l, 'rate')}
+                    {cell(l, 'unit_rate')}
                   </div>
                   <div className='flex items-center justify-end p-2.5 font-mono text-foreground'>
-                    {gbp(l.qty * l.rate)}
+                    {gbp(num(l.quantity) * num(l.unit_rate))}
                   </div>
-                  <div className='border-l border-border/50'>
-                    <PctCell
-                      leaf={l}
-                      editable={editable('pct')}
-                      editing={editing?.id === l.id && editing.field === 'pct'}
-                      onStart={() => setEditing({ id: l.id, field: 'pct' })}
-                      onCommit={(v) => {
-                        setField(l.id, 'pct', v)
-                        setEditing(null)
-                      }}
-                      onCancel={() => setEditing(null)}
-                    />
-                  </div>
-                  <div className='flex items-center p-2.5'>
-                    <StatusPill tone={st.tone}>{st.label}</StatusPill>
+                  <div className='flex items-center justify-end p-2.5 font-mono text-[11px] text-muted-foreground'>
+                    {num(l.weight).toFixed(2)}%
                   </div>
                 </div>
-              )
-            })}
+                )
+              })}
 
-            <div
-              className='grid bg-muted/30 text-[11px]'
-              style={{ gridTemplateColumns: GRID }}
-            >
-              <div className='col-span-5 p-2.5 text-right text-muted-foreground italic'>
-                Subtotal — {sec.section.name}
+              <div
+                className='grid bg-muted/30 text-[11px]'
+                style={{ gridTemplateColumns: BOQ_GRID }}
+              >
+                <div className='col-span-5 p-2.5 text-right text-muted-foreground italic'>
+                  Subtotal{sec.header ? ` — ${sec.header.description}` : ''}
+                </div>
+                <div className='p-2.5 text-right font-mono font-semibold text-foreground'>
+                  {gbp(amt)}
+                </div>
+                <div className='p-2.5 text-right font-mono text-muted-foreground'>
+                  {wt.toFixed(2)}%
+                </div>
               </div>
-              <div className='p-2.5 text-right font-mono font-semibold text-foreground'>
-                {gbp(sec.amount)}
-              </div>
-              <div className='flex items-center gap-2 p-2.5'>
-                <Progress value={sec.pct} className='h-1.5 flex-1 bg-muted' />
-                <span className='w-8 text-right font-mono text-muted-foreground'>
-                  {sec.pct}%
-                </span>
-              </div>
-              <div />
             </div>
-          </div>
-        ))}
+          )
+        })}
 
         <div
           className='grid border-t border-border bg-muted/60 text-xs'
-          style={{ gridTemplateColumns: GRID }}
+          style={{ gridTemplateColumns: BOQ_GRID }}
         >
           <div className='col-span-5 p-3 font-semibold text-foreground'>
             Contract total
           </div>
           <div className='p-3 text-right font-mono font-semibold text-foreground'>
-            {gbp(totals.total)}
+            {gbp(total)}
           </div>
-          <div className='flex items-center gap-2 p-3'>
-            <Progress value={totals.pct} className='h-2 flex-1 bg-muted' />
-            <span className='font-mono text-[11px] font-semibold text-foreground'>
-              {totals.pct}%
-            </span>
-          </div>
-          <div />
+          <div className='p-3' />
         </div>
       </div>
     </div>
   )
 }
 
-function PctCell({
-  leaf,
-  editable,
-  editing,
-  onStart,
-  onCommit,
-  onCancel,
+function Field({
+  label,
+  className,
+  children,
 }: {
-  leaf: BoqLeaf
-  editable: boolean
-  editing: boolean
-  onStart: () => void
-  onCommit: (v: number) => void
-  onCancel: () => void
+  label: string
+  className?: string
+  children: React.ReactNode
 }) {
-  if (editable && editing)
-    return (
-      <div className='flex h-full items-center gap-2 px-2'>
-        <input
-          type='range'
-          min={0}
-          max={100}
-          defaultValue={leaf.pct}
-          onChange={(e) => onCommit(Number(e.target.value))}
-          className='flex-1'
-        />
-        <input
-          autoFocus
-          type='number'
-          defaultValue={leaf.pct}
-          onBlur={(e) => onCommit(Number(e.target.value))}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-            if (e.key === 'Escape') onCancel()
-          }}
-          className='w-11 rounded-sm border-2 border-primary px-1 text-right font-mono text-[11px] outline-none'
-        />
-      </div>
-    )
   return (
-    <div
-      onClick={() => editable && onStart()}
-      className={cn(
-        'flex h-full items-center gap-2 px-2',
-        editable ? 'cursor-pointer hover:bg-muted' : ''
-      )}
-    >
-      <Progress
-        value={leaf.pct}
-        className={cn(
-          'h-2 flex-1',
-          editable ? 'bg-muted' : 'bg-muted/50 opacity-60'
-        )}
-      />
-      <span className='w-8 text-right font-mono text-[11px] text-muted-foreground'>
-        {leaf.pct}%
+    <label className={cn('flex flex-col gap-1', className)}>
+      <span className='text-[10px] tracking-wide text-muted-foreground uppercase'>
+        {label}
       </span>
-    </div>
+      {children}
+    </label>
   )
 }
 
-function RevisionHistory({ revisions }: { revisions: Revision[] }) {
-  return (
-    <Panel
-      title='Revision history'
-      description='Each change to quantities or rates is saved as a new revision. The active revision is the baseline for progress & valuation; earlier revisions are kept and marked superseded.'
-    >
-      {revisions.length ? (
-        <div className='divide-y divide-border'>
-          {revisions.map((rv) => (
-            <div
-              key={rv.rev}
-              className='grid items-center gap-3 py-3 text-xs'
-              style={{ gridTemplateColumns: '80px 110px 1fr 140px 60px' }}
-            >
-              <span className='w-fit rounded-md bg-muted px-2 py-1 text-[11px] font-semibold text-foreground'>
-                Rev {rv.rev}
-              </span>
-              <StatusPill tone={rv.tone}>{rv.status}</StatusPill>
-              <span className='text-foreground'>{rv.note}</span>
-              <span className='text-muted-foreground'>
-                {rv.date} · {rv.by}
-              </span>
-              <button className='text-right text-[11px] text-muted-foreground hover:text-foreground'>
-                View →
-              </button>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <EmptyState message='No revisions available.' />
-      )}
-    </Panel>
-  )
-}
-
-function FieldUpdate({
-  projectName,
-  leaves,
-  setLeaves,
+function AddItemForm({
+  sections,
+  onAdd,
+  onAddSection,
+  busy,
 }: {
-  projectName: string
-  leaves: BoqLeaf[]
-  setLeaves: React.Dispatch<React.SetStateAction<BoqLeaf[]>>
+  sections: Section[]
+  onAdd: (item: BoqItemInput) => void
+  onAddSection: (input: { code: string; description: string }) => void
+  busy: boolean
 }) {
-  const bump = (id: string, delta: number) =>
-    setLeaves((prev) =>
-      prev.map((l) =>
-        l.id === id
-          ? { ...l, pct: Math.max(0, Math.min(100, l.pct + delta)) }
-          : l
-      )
-    )
-  const set = (id: string, v: number) =>
-    setLeaves((prev) => prev.map((l) => (l.id === id ? { ...l, pct: v } : l)))
+  // Any existing item can be a parent; sections (headers) first, then leaves.
+  const parents = sections.flatMap((s) => [
+    ...(s.header ? [s.header] : []),
+    ...s.leaves,
+  ])
 
-  const fieldItems = leaves.filter((l) => l.pct < 100).slice(0, 5)
+  const emptySection = { code: '', description: '' }
+  const emptyItem = {
+    parent_id: '',
+    code: '',
+    description: '',
+    unit: '',
+    quantity: '',
+    unit_rate: '',
+  }
+  const [sec, setSec] = useState(emptySection)
+  const [it, setIt] = useState(emptyItem)
+  const setS =
+    (k: keyof typeof emptySection) => (e: React.ChangeEvent<HTMLInputElement>) =>
+      setSec((p) => ({ ...p, [k]: e.target.value }))
+  const setI =
+    (k: keyof typeof emptyItem) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      setIt((p) => ({ ...p, [k]: e.target.value }))
+
+  const submitSection = () => {
+    if (!sec.code.trim() || !sec.description.trim()) {
+      toast.error('Section code and title are required.')
+      return
+    }
+    onAddSection({ code: sec.code.trim(), description: sec.description.trim() })
+    setSec(emptySection)
+  }
+
+  const submitItem = () => {
+    if (!it.parent_id) {
+      toast.error('Choose a parent for the line item.')
+      return
+    }
+    if (!it.code.trim() || !it.description.trim()) {
+      toast.error('Code and description are required.')
+      return
+    }
+    onAdd({
+      parent_id: it.parent_id,
+      code: it.code.trim(),
+      description: it.description.trim(),
+      unit: it.unit.trim() || null,
+      quantity: it.quantity ? Number(it.quantity) : null,
+      unit_rate: it.unit_rate ? Number(it.unit_rate) : null,
+    })
+    setIt({ ...emptyItem, parent_id: it.parent_id })
+  }
+
+  const selectCls =
+    'h-8 rounded-md border border-input bg-background px-2 text-xs'
 
   return (
-    <div className='flex flex-wrap gap-8'>
-      <div className='w-[330px] overflow-hidden rounded-[34px] border-[10px] border-muted bg-card shadow-lg'>
-        <div className='flex h-7 items-center justify-center bg-muted'>
-          <div className='h-1.5 w-20 rounded bg-border' />
+    <div className='mt-3 space-y-3'>
+      <div className='rounded-lg border border-dashed border-border bg-muted/30 p-3'>
+        <div className='mb-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase'>
+          Add section
         </div>
-        <div className='border-b border-border p-4'>
-          <div className='text-[10px] tracking-[0.16em] text-muted-foreground uppercase'>
-            Field update · {projectName}
-          </div>
-          <div className='mt-0.5 text-base font-semibold text-foreground'>
-            Today's progress
-          </div>
-        </div>
-        <div className='max-h-[430px] overflow-auto p-3.5'>
-          {fieldItems.map((f) => (
-            <div
-              key={f.id}
-              className='mt-2.5 rounded-lg border border-border p-3'
-            >
-              <div className='flex items-baseline justify-between'>
-                <div className='text-[13px] font-semibold text-foreground'>
-                  {f.desc}
-                </div>
-                <div className='font-mono text-[13px] font-semibold text-muted-foreground'>
-                  {f.pct}%
-                </div>
-              </div>
-              <div className='mt-0.5 mb-2.5 text-[11px] text-muted-foreground'>
-                {f.code} · {f.qty.toLocaleString('en-GB')} {f.unit}
-              </div>
-              <input
-                type='range'
-                min={0}
-                max={100}
-                value={f.pct}
-                onChange={(e) => set(f.id, Number(e.target.value))}
-                className='w-full'
-              />
-              <div className='mt-2.5 flex gap-2'>
-                <button
-                  onClick={() => bump(f.id, -5)}
-                  className='flex-1 rounded-md border border-border py-2 text-[13px] text-muted-foreground hover:bg-muted'
-                >
-                  −5%
-                </button>
-                <button
-                  onClick={() => bump(f.id, 5)}
-                  className='flex-1 rounded-md border border-border py-2 text-[13px] text-muted-foreground hover:bg-muted'
-                >
-                  +5%
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className='border-t border-border p-3.5'>
-          <Button className='w-full rounded-lg py-6 text-sm font-semibold'>
-            Submit update
+        <div className='flex flex-wrap items-end gap-2'>
+          <Field label='Code' className='w-24'>
+            <Input value={sec.code} onChange={setS('code')} className='h-8 text-xs' />
+          </Field>
+          <Field label='Section title' className='min-w-44 flex-1'>
+            <Input
+              value={sec.description}
+              onChange={setS('description')}
+              className='h-8 text-xs'
+            />
+          </Field>
+          <Button
+            size='sm'
+            variant='outline'
+            className='h-8 rounded-md text-xs'
+            disabled={busy}
+            onClick={submitSection}
+          >
+            <Plus className='size-3.5' /> Add section
           </Button>
         </div>
       </div>
 
-      <div className='max-w-md flex-1 pt-2'>
-        <div className='mb-2 text-[11px] tracking-[0.16em] text-muted-foreground uppercase'>
-          On-site quick update
+      <div className='rounded-lg border border-dashed border-border bg-muted/30 p-3'>
+        <div className='mb-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase'>
+          Add line item
         </div>
-        <div className='mb-4 text-lg font-semibold text-foreground'>
-          Update progress from the field — no spreadsheet needed
-        </div>
-        {[
-          [
-            '1',
-            'Open today on site',
-            'Only items that are not yet complete show up, sorted by what crews are working on.',
-          ],
-          [
-            '2',
-            'Nudge the percentage',
-            'Drag the slider or tap ±5% — changes apply to the active revision instantly.',
-          ],
-          [
-            '3',
-            'Submit once',
-            'One submit posts every change; the office sees updated valuation in real time.',
-          ],
-        ].map(([num, title, body]) => (
-          <div key={num} className='mb-4 flex gap-3'>
-            <div className='grid size-6 flex-none place-items-center rounded-md border border-border text-xs text-muted-foreground'>
-              {num}
-            </div>
-            <div>
-              <div className='text-[13px] font-semibold text-foreground'>
-                {title}
-              </div>
-              <div className='mt-0.5 text-xs leading-relaxed text-muted-foreground'>
-                {body}
-              </div>
-            </div>
+        {parents.length === 0 ? (
+          <p className='text-xs text-muted-foreground'>
+            Add a section first — every line item needs a parent.
+          </p>
+        ) : (
+          <div className='flex flex-wrap items-end gap-2'>
+            <Field label='Parent' className='min-w-44'>
+              <select
+                value={it.parent_id}
+                onChange={setI('parent_id')}
+                className={selectCls}
+              >
+                <option value='' disabled>
+                  Select parent…
+                </option>
+                {parents.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.code} · {p.description}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label='Code' className='w-20'>
+              <Input value={it.code} onChange={setI('code')} className='h-8 text-xs' />
+            </Field>
+            <Field label='Description' className='min-w-40 flex-1'>
+              <Input
+                value={it.description}
+                onChange={setI('description')}
+                className='h-8 text-xs'
+              />
+            </Field>
+            <Field label='Unit' className='w-16'>
+              <Input value={it.unit} onChange={setI('unit')} className='h-8 text-xs' />
+            </Field>
+            <Field label='Qty' className='w-24'>
+              <Input
+                type='number'
+                value={it.quantity}
+                onChange={setI('quantity')}
+                className='h-8 text-xs'
+              />
+            </Field>
+            <Field label='Rate' className='w-28'>
+              <Input
+                type='number'
+                value={it.unit_rate}
+                onChange={setI('unit_rate')}
+                className='h-8 text-xs'
+              />
+            </Field>
+            <Button
+              size='sm'
+              className='h-8 rounded-md text-xs'
+              disabled={busy}
+              onClick={submitItem}
+            >
+              <Plus className='size-3.5' /> Add
+            </Button>
           </div>
-        ))}
-        <div className='rounded-lg border border-dashed border-border bg-muted/40 p-3.5 text-xs leading-relaxed text-muted-foreground'>
-          Field updates change{' '}
-          <strong className='text-foreground'>progress only</strong> against the
-          active revision. Quantities & rates stay locked — those go through a
-          Revise draft.
-        </div>
+        )}
       </div>
     </div>
   )
 }
 
-function ExportDialog() {
+function RevisionHistory({
+  versions,
+  currentId,
+  onView,
+}: {
+  versions: BoqVersion[]
+  currentId: string
+  onView: (id: string) => void
+}) {
+  const tone = (s: BoqVersion['status']) =>
+    s === 'active' ? 'good' : s === 'draft' ? 'risk' : 'muted'
+  const date = (v: BoqVersion) =>
+    new Date(v.baselined_at ?? v.created_at).toLocaleDateString('en-GB')
   return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button variant='outline' size='sm' className='rounded-md text-xs'>
-          <Download className='size-3.5' /> Export to Excel
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Export Bill of Quantities</DialogTitle>
-          <DialogDescription>Choose an export format.</DialogDescription>
-        </DialogHeader>
-        <div className='grid gap-3 py-2'>
-          <Select defaultValue='xlsx'>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value='xlsx'>Excel (.xlsx)</SelectItem>
-              <SelectItem value='csv'>CSV (.csv)</SelectItem>
-              <SelectItem value='pdf'>PDF priced summary</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button>Download export</Button>
+    <Panel
+      title='Revision history'
+      description='Each baseline is a version. The active version is the baseline for progress & valuation; earlier ones are superseded.'
+    >
+      {versions.length ? (
+        <div className='divide-y divide-border'>
+          {[...versions]
+            .sort((a, b) => b.version_no - a.version_no)
+            .map((v) => (
+              <div
+                key={v.id}
+                className='grid items-center gap-3 py-3 text-xs'
+                style={{ gridTemplateColumns: '90px 110px 1fr 150px 60px' }}
+              >
+                <span className='w-fit rounded-md bg-muted px-2 py-1 text-[11px] font-semibold text-foreground'>
+                  Rev {v.version_no}
+                </span>
+                <StatusPill tone={tone(v.status)}>{v.status}</StatusPill>
+                <span className='text-foreground'>
+                  {v.title}
+                  {v.reason ? ` · ${v.reason}` : ''}
+                </span>
+                <span className='text-muted-foreground'>{date(v)}</span>
+                <button
+                  onClick={() => onView(v.id)}
+                  className={cn(
+                    'text-right text-[11px]',
+                    v.id === currentId
+                      ? 'font-semibold text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  {v.id === currentId ? 'Viewing' : 'View →'}
+                </button>
+              </div>
+            ))}
         </div>
-      </DialogContent>
-    </Dialog>
+      ) : (
+        <EmptyState message='No revisions yet.' />
+      )}
+    </Panel>
   )
 }
 

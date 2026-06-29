@@ -270,6 +270,164 @@ export async function createProject(
   return res.json()
 }
 
+// --- BoQ (versions & items) -------------------------------------------------
+// Numeric columns arrive as strings from pg; callers coerce with Number().
+
+export type BoqVersion = {
+  id: string
+  project_id: string
+  version_no: number
+  title: string
+  status: 'draft' | 'active' | 'superseded' | 'archived'
+  reason: string | null
+  total_value: string | number | null
+  baselined_at: string | null
+  baselined_by: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type BoqItem = {
+  id: string
+  boq_version_id: string
+  parent_id: string | null
+  code: string
+  description: string
+  unit: string | null
+  quantity: string | number | null
+  unit_rate: string | number | null
+  value: string | number | null
+  weight: string | number
+  weight_source: 'derived' | 'manual'
+  planned_start: string | null
+  planned_finish: string | null
+  distribution: 'linear' | 'manual'
+  progress_mode: 'by_quantity' | 'by_percent'
+  sort_order: number
+  created_at: string
+  updated_at: string
+}
+
+export type BoqItemInput = {
+  code: string
+  description: string
+  unit?: string | null
+  parent_id?: string | null
+  parent_code?: string | null
+  quantity?: number | null
+  unit_rate?: number | null
+  weight?: number | null
+  weight_source?: 'derived' | 'manual'
+  progress_mode?: 'by_quantity' | 'by_percent'
+  planned_start?: string | null
+  planned_finish?: string | null
+  sort_order?: number | null
+}
+
+export async function listBoqVersions(
+  token: string,
+  projectId: string
+): Promise<{ data: BoqVersion[] }> {
+  const res = await fetch(`${BASE}/projects/${projectId}/boq-versions`, {
+    headers: { authorization: `Bearer ${token}` },
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function createBoqVersion(
+  token: string,
+  projectId: string,
+  body: { title: string; reason?: string | null; clone_from?: string | null }
+): Promise<{ version: BoqVersion }> {
+  const res = await fetch(`${BASE}/projects/${projectId}/boq-versions`, {
+    method: 'POST',
+    headers: tenantJsonHeaders(token),
+    credentials: 'include',
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function listBoqItems(
+  token: string,
+  versionId: string
+): Promise<{ data: BoqItem[] }> {
+  const res = await fetch(`${BASE}/boq-versions/${versionId}/items`, {
+    headers: { authorization: `Bearer ${token}` },
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function createBoqItem(
+  token: string,
+  versionId: string,
+  item: BoqItemInput
+): Promise<{ item: BoqItem }> {
+  const res = await fetch(`${BASE}/boq-versions/${versionId}/items`, {
+    method: 'POST',
+    headers: tenantJsonHeaders(token),
+    credentials: 'include',
+    body: JSON.stringify(item),
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function patchBoqItem(
+  token: string,
+  itemId: string,
+  patch: Partial<Omit<BoqItemInput, 'parent_code'>>
+): Promise<{ item: BoqItem }> {
+  const res = await fetch(`${BASE}/boq-items/${itemId}`, {
+    method: 'PATCH',
+    headers: tenantJsonHeaders(token),
+    credentials: 'include',
+    body: JSON.stringify(patch),
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function deleteBoqItem(token: string, itemId: string): Promise<void> {
+  const res = await fetch(`${BASE}/boq-items/${itemId}`, {
+    method: 'DELETE',
+    headers: { authorization: `Bearer ${token}` },
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+}
+
+export async function recalcBoqWeights(
+  token: string,
+  versionId: string
+): Promise<{ version: BoqVersion }> {
+  const res = await fetch(`${BASE}/boq-versions/${versionId}/recalc-weights`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function activateBoqVersion(
+  token: string,
+  versionId: string
+): Promise<{ version: BoqVersion }> {
+  const res = await fetch(`${BASE}/boq-versions/${versionId}/activate`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
 export async function listPlatformTenants(
   token: string
 ): Promise<{ data: PlatformTenant[] }> {

@@ -271,11 +271,14 @@ CREATE TABLE boq_items (
     created_at      timestamptz   NOT NULL DEFAULT now(),
     updated_at      timestamptz   NOT NULL DEFAULT now(),
     deleted_at      timestamptz,
-    UNIQUE (boq_version_id, code),
     CONSTRAINT chk_dates CHECK (planned_finish IS NULL OR planned_start IS NULL OR planned_finish >= planned_start)
 );
 CREATE INDEX idx_boq_items_version ON boq_items(boq_version_id);
 CREATE INDEX idx_boq_items_parent  ON boq_items(parent_id);
+-- Code is unique within a parent, not the whole version: the same code may
+-- recur under different parents. NULLS NOT DISTINCT keeps top-level codes unique.
+CREATE UNIQUE INDEX uq_boq_item_code ON boq_items (boq_version_id, parent_id, code)
+    NULLS NOT DISTINCT WHERE deleted_at IS NULL;
 
 -- §4.5 reporting periods & progress ----------------------------------------
 -- reporting_periods defined before boq_item_distribution (which FKs it).
