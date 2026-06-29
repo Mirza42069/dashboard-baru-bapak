@@ -1,4 +1,4 @@
-import { useDeferredValue, useState } from 'react'
+import { type FormEvent, useDeferredValue, useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import {
   ArrowUpRight,
@@ -10,6 +10,9 @@ import {
   SlidersHorizontal,
 } from 'lucide-react'
 import { Area, AreaChart, CartesianGrid, XAxis } from 'recharts'
+import { toast } from 'sonner'
+import { createMember, getMe, listMembers, type TenantMember } from '@/lib/auth-api'
+import { useAuthStore } from '@/stores/auth-store'
 import { Button } from '@/components/ui/button'
 import {
   ChartContainer,
@@ -21,11 +24,13 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 import {
   Select,
@@ -50,7 +55,6 @@ import {
   projects,
   spendSeries,
   systems,
-  team,
 } from './data'
 
 const spendConfig = {
@@ -318,6 +322,7 @@ function ProjectCard({ project }: { project: (typeof projects)[number] }) {
 }
 
 const MEMBER_GRID = '1.4fr 1.6fr 1.3fr 90px 90px'
+const emptyMemberForm = { full_name: '', email: '', password: '' }
 
 const memberInitials = (name: string) =>
   name
@@ -327,16 +332,94 @@ const memberInitials = (name: string) =>
     .join('')
     .toUpperCase()
 
+const roleLabel = (role: string) => {
+  if (role === 'admin') return 'Admin'
+  if (role === 'project_manager') return 'Manager'
+  if (role === 'field_engineer') return 'Field Engineer'
+  if (role === 'viewer') return 'Viewer'
+  return role
+}
+
+const primaryRole = (member: TenantMember) =>
+  member.assignments[0]?.role ? roleLabel(member.assignments[0].role) : 'No role'
+
 export function TeamPage() {
-  const members = [
-    ...team.map((m) => ({
-      name: m.name,
-      email: m.email,
-      role: m.role,
-      projects: m.projects,
-      status: 'Active' as const,
-    })),
-  ]
+  const { auth } = useAuthStore()
+  const [members, setMembers] = useState<TenantMember[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [open, setOpen] = useState(false)
+  const [form, setForm] = useState(emptyMemberForm)
+  const token = auth.accessToken
+  const canManageMembers =
+    auth.user?.permissions?.tenant.includes('member.manage') ?? false
+
+  async function refreshMembers() {
+    if (!token) return
+    setLoading(true)
+    try {
+      const res = await listMembers(token)
+      setMembers(res.data)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to load members.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!token) return
+    async function hydrateUser() {
+      if (auth.user) return
+      try {
+        const me = await getMe(token)
+        auth.setUser({
+          id: me.user.id,
+          email: me.user.email,
+          full_name: me.user.full_name,
+          tenant: me.tenant,
+          permissions: me.permissions,
+        })
+      } catch {
+        // Route auth owns redirects; this page only needs permissions for UI gating.
+      }
+    }
+
+    void hydrateUser()
+  }, [auth, token])
+
+  useEffect(() => {
+    if (!token) return
+    async function loadMembers() {
+      try {
+        const res = await listMembers(token)
+        setMembers(res.data)
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to load members.')
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    void loadMembers()
+  }, [token])
+
+  async function submitMember(event: FormEvent) {
+    event.preventDefault()
+    if (!token) return
+    setSaving(true)
+    try {
+      await createMember(token, form)
+      toast.success('Manager account created.')
+      setForm(emptyMemberForm)
+      setOpen(false)
+      await refreshMembers()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to create member.')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <>
@@ -364,12 +447,23 @@ export function TeamPage() {
             <Button variant='outline' size='sm' className='rounded-md text-xs'>
               Export
             </Button>
-            <InviteDialog />
+            {canManageMembers && (
+              <CreateMemberDialog
+                open={open}
+                onOpenChange={setOpen}
+                form={form}
+                setForm={setForm}
+                onSubmit={submitMember}
+                saving={saving}
+              />
+            )}
           </div>
         }
       >
         <div className='overflow-x-auto'>
-          {members.length ? (
+          {loading ? (
+            <EmptyState message='Loading members...' />
+          ) : members.length ? (
             <div className='min-w-[680px]'>
               <div
                 className='grid gap-2.5 border-b border-border pb-2 text-[10px] tracking-wide text-muted-foreground uppercase'
@@ -389,24 +483,24 @@ export function TeamPage() {
                 >
                   <div className='flex items-center gap-2.5'>
                     <span className='grid size-7 flex-none place-items-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground'>
-                      {memberInitials(m.name)}
+                      {memberInitials(m.full_name || m.email)}
                     </span>
                     <span className='font-medium text-foreground'>
-                      {m.name}
+                      {m.full_name || m.email}
                     </span>
                   </div>
                   <div className='text-[11px] text-muted-foreground'>
                     {m.email}
                   </div>
                   <div className='flex max-w-44 items-center justify-between rounded-md border border-border px-2.5 py-1.5 text-foreground'>
-                    <span>{m.role}</span>
+                    <span>{primaryRole(m)}</span>
                     <ChevronDown className='size-3 text-muted-foreground' />
                   </div>
                   <div className='font-mono text-muted-foreground'>
-                    {m.projects}
+                    0
                   </div>
                   <div>
-                    <StatusPill tone={m.status === 'Active' ? 'good' : 'muted'}>
+                    <StatusPill tone={m.status === 'active' ? 'good' : 'muted'}>
                       {m.status}
                     </StatusPill>
                   </div>
@@ -469,33 +563,82 @@ function NewProjectDialog({ trigger }: { trigger?: React.ReactNode }) {
   )
 }
 
-function InviteDialog() {
+function CreateMemberDialog({
+  open,
+  onOpenChange,
+  form,
+  setForm,
+  onSubmit,
+  saving,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  form: typeof emptyMemberForm
+  setForm: (form: typeof emptyMemberForm) => void
+  onSubmit: (event: FormEvent) => void
+  saving: boolean
+}) {
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
         <Button className='rounded-md text-xs'>
-          <Plus className='size-3.5' /> Invite member
+          <Plus className='size-3.5' /> Create member
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Invite member</DialogTitle>
-          <DialogDescription>Invite a team member.</DialogDescription>
+          <DialogTitle>Create member</DialogTitle>
+          <DialogDescription>
+            Create a Manager account with an email and password.
+          </DialogDescription>
         </DialogHeader>
-        <div className='grid gap-3 py-2'>
-          <Input placeholder='name@company.com' />
-          <Select defaultValue='viewer'>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value='admin'>Admin</SelectItem>
-              <SelectItem value='manager'>Manager</SelectItem>
-              <SelectItem value='viewer'>Viewer</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button>Send invite</Button>
-        </div>
+        <form className='grid gap-4' onSubmit={onSubmit}>
+          <div className='grid gap-2'>
+            <Label htmlFor='member-name'>Full name</Label>
+            <Input
+              id='member-name'
+              value={form.full_name}
+              onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+              required
+            />
+          </div>
+          <div className='grid gap-2'>
+            <Label htmlFor='member-email'>Email</Label>
+            <Input
+              id='member-email'
+              type='email'
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              required
+            />
+          </div>
+          <div className='grid gap-2'>
+            <Label htmlFor='member-password'>Password</Label>
+            <Input
+              id='member-password'
+              type='password'
+              minLength={8}
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              required
+            />
+          </div>
+          <div className='rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground'>
+            Role: Manager
+          </div>
+          <DialogFooter>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button disabled={saving}>
+              {saving ? 'Creating...' : 'Create member'}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   )

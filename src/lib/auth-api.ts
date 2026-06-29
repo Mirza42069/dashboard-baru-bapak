@@ -45,6 +45,19 @@ export type PlatformTenantMember = {
   }[]
 }
 
+export type TenantMember = {
+  id: string
+  email: string
+  full_name: string
+  status: string
+  assignments: {
+    id: string
+    role: string
+    scope_type: string
+    scope_id: string | null
+  }[]
+}
+
 export type Me = {
   user: { id: string; email: string; full_name: string; status: string }
   tenant: { id: string; name: string; slug: string }
@@ -119,6 +132,43 @@ function platformJsonHeaders(token: string) {
     'content-type': 'application/json',
     authorization: `Bearer ${token}`,
   }
+}
+
+function tenantJsonHeaders(token: string) {
+  return {
+    'content-type': 'application/json',
+    authorization: `Bearer ${token}`,
+  }
+}
+
+export async function listMembers(
+  token: string
+): Promise<{ data: TenantMember[] }> {
+  const res = await fetch(`${BASE}/members`, {
+    headers: { authorization: `Bearer ${token}` },
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function createMember(
+  token: string,
+  body: { email: string; password: string; full_name: string }
+): Promise<{ user: TenantMember & { role: 'project_manager' } }> {
+  const res = await fetch(`${BASE}/members`, {
+    method: 'POST',
+    headers: tenantJsonHeaders(token),
+    credentials: 'include',
+    body: JSON.stringify({
+      ...body,
+      role_key: 'project_manager',
+      scope_type: 'tenant',
+      scope_id: null,
+    }),
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
 }
 
 export async function listPlatformTenants(

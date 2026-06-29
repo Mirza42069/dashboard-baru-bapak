@@ -8,8 +8,9 @@ import { authenticate, requirePermission, tenantScope } from '../middleware'
 export const membersRouter = Router()
 membersRouter.use(authenticate)
 
-// Roles a tenant admin may hand out (system roles, excluding 'admin' itself for now).
-const ASSIGNABLE = ['project_manager', 'field_engineer', 'viewer', 'admin'] as const
+// Tenant admins can only create Manager accounts. Tenant admins themselves are
+// provisioned by platform admins through the platform plane.
+const ASSIGNABLE = ['project_manager'] as const
 
 // POST /members — create a member with a password and an initial role grant.
 membersRouter.post(
@@ -69,7 +70,6 @@ membersRouter.post(
 // GET /members — members of the firm with their role assignments.
 membersRouter.get(
   '/members',
-  requirePermission('member.manage', tenantScope),
   asyncHandler(async (req, res) => {
     const r = await withCtx(req.ctx, (q) =>
       q(
