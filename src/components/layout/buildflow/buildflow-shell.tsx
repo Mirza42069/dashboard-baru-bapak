@@ -5,7 +5,7 @@ import { BuildFlowTopbar } from './buildflow-topbar'
 
 export function BuildFlowShell() {
   return (
-    <div className='min-h-svh bg-background text-[13px] text-foreground antialiased'>
+    <div className='w-full min-h-svh bg-background text-[13px] text-foreground antialiased'>
       <BuildFlowTopbar />
 
       <div className='grid min-h-[calc(100svh-3.5rem)] grid-cols-1 gap-4 md:grid-cols-[244px_1fr] md:p-4 md:pe-0'>
