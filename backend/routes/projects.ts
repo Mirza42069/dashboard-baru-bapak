@@ -134,12 +134,23 @@ projectsRouter.get(
   requirePermission('project.view', paramScope('project', 'projectId')),
   asyncHandler(async (req, res) => {
     const r = await withCtx(req.ctx, (q) =>
-      q(`SELECT ${projCols}, updated_at FROM projects WHERE id = $1 AND deleted_at IS NULL`, [
-        req.params.projectId,
-      ]),
+      q(
+        `SELECT ${projColsP}, p.updated_at, c.name AS client_name,
+                COALESCE(json_agg(DISTINCT jsonb_build_object(
+                  'id', u.id, 'full_name', u.full_name, 'email', u.email
+                )) FILTER (WHERE u.id IS NOT NULL), '[]') AS managers
+         FROM projects p JOIN clients c ON c.id = p.client_id
+         LEFT JOIN role_assignments ra ON ra.scope_type = 'project' AND ra.scope_id = p.id
+         LEFT JOIN roles r ON r.id = ra.role_id AND r.key = 'project_manager'
+         LEFT JOIN users u ON u.id = ra.user_id AND r.id IS NOT NULL
+         WHERE p.id = $1 AND p.deleted_at IS NULL
+         GROUP BY ${projColsP}, p.updated_at, c.name`,
+        [req.params.projectId],
+      ),
     )
     if (!r.rowCount) throw errors.notFound('Project not found.')
-    res.json({ project: r.rows[0] })
+    const { client_name, client_id, managers, ...project } = r.rows[0]
+    res.json({ project: { ...project, client_id, client: { id: client_id, name: client_name }, managers } })
   }),
 )
 

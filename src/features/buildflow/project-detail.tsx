@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useParams } from '@tanstack/react-router'
 import {
   Check,
@@ -8,6 +8,9 @@ import {
   Plus,
   Upload,
 } from 'lucide-react'
+import { toast } from 'sonner'
+import { getProject, type Project as ApiProject } from '@/lib/auth-api'
+import { useAuthStore } from '@/stores/auth-store'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
@@ -35,11 +38,9 @@ import {
   type BoqLeaf,
 } from './boq'
 import { EmptyState, MetricCard, Panel, StatusPill } from './components'
-import { projects, systems, type Project } from './data'
+import { systems } from './data'
 
 const GRID = '74px 1.9fr 52px 100px 96px 104px 168px 104px'
-
-const projectMeta: [string, string][] = []
 
 const workPackages: { name: string; pct: number }[] = []
 
@@ -53,13 +54,6 @@ const documents: {
   type: string
   size: string
   updated: string
-}[] = []
-
-const projectTeam: {
-  initials: string
-  name: string
-  email: string
-  role: string
 }[] = []
 
 type Revision = {
@@ -83,19 +77,64 @@ const projectTabs = [
 ]
 
 const statusTone = (s: string) =>
-  s === 'On track'
+  s === 'On track' || s === 'active' || s === 'completed'
     ? 'good'
-    : s === 'At risk'
+    : s === 'At risk' || s === 'planning' || s === 'on_hold'
       ? 'risk'
-      : s === 'Delayed'
+      : s === 'Delayed' || s === 'cancelled'
         ? 'danger'
         : ('muted' as const)
 
+const formatMoney = (value: ApiProject['contract_value']) => {
+  if (value == null) return 'Not set'
+  const amount = typeof value === 'number' ? value : Number(value)
+  if (Number.isNaN(amount)) return String(value)
+  return '£' + Math.round(amount).toLocaleString('en-GB')
+}
+
+const formatDate = (value: string | null) => value || 'Not set'
+
+const memberInitials = (name: string) =>
+  name
+    .split(' ')
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
+
+const projectMetricTone = (status: ApiProject['status']) =>
+  status === 'active' || status === 'completed'
+    ? 'good'
+    : status === 'cancelled'
+      ? 'risk'
+      : ('neutral' as const)
+
 export function ProjectDetailPage() {
-  const { code } = useParams({ from: '/_authenticated/projects/$code' })
-  const project = projects.find((p) => p.code === code)
+  const { id } = useParams({ from: '/_authenticated/projects/$id' })
+  const { auth } = useAuthStore()
+  const [project, setProject] = useState<ApiProject | null>(null)
+  const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('boq')
 
+  useEffect(() => {
+    if (!auth.accessToken) return
+    async function loadProject() {
+      setLoading(true)
+      try {
+        const res = await getProject(auth.accessToken, id)
+        setProject(res.project)
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Failed to load project.')
+        setProject(null)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    void loadProject()
+  }, [auth.accessToken, id])
+
+  if (loading) return <EmptyState message='Loading project...' />
   if (!project) return <EmptyState message='Project not found.' />
 
   const tabLabel = projectTabs.find((t) => t.value === tab)?.label ?? 'Overview'
@@ -131,7 +170,7 @@ export function ProjectDetailPage() {
             Overall progress
           </div>
           <div className='font-mono text-xl font-semibold text-foreground'>
-            {project.progress}%
+            0%
           </div>
         </div>
       </div>
@@ -165,39 +204,57 @@ export function ProjectDetailPage() {
           <DocumentsTab />
         </TabsContent>
         <TabsContent value='team'>
-          <TeamTab />
+          <TeamTab project={project} />
         </TabsContent>
       </Tabs>
     </div>
   )
 }
 
-function OverviewTab({ project }: { project: Project }) {
+function OverviewTab({ project }: { project: ApiProject }) {
+  const projectMeta: [string, string][] = [
+    ['Client', project.client.name],
+    ['Project code', project.code || 'Not set'],
+    ['Description', project.description || 'Not set'],
+    ['Location', project.location || 'Not set'],
+    ['Contract number', project.contract_no || 'Not set'],
+    ['Contract value', formatMoney(project.contract_value)],
+    ['Contract start', formatDate(project.contract_start)],
+    ['Contract finish', formatDate(project.contract_finish)],
+    ['Reporting period', project.period_type],
+    ['Schedule start', formatDate(project.schedule_start)],
+    ['Data date', formatDate(project.data_date)],
+    [
+      'Project managers',
+      project.managers.map((m) => m.full_name || m.email).join(', ') || 'Not assigned',
+    ],
+  ]
+
   return (
     <div>
       <div className='mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
         <MetricCard
           label='Progress'
-          value={`${project.progress}%`}
+          value='0%'
           hint='earned value basis'
           tone='good'
         />
         <MetricCard
           label='Contract value'
-          value={project.value}
+          value={formatMoney(project.contract_value)}
           hint='current revision'
         />
         <MetricCard
-          label='Budget used'
-          value={`${project.budgetUsed}%`}
-          hint='of contract value'
-          tone={project.budgetUsed > 70 ? 'risk' : 'neutral'}
+          label='Managers'
+          value={String(project.managers.length)}
+          hint='assigned users'
+          tone='neutral'
         />
         <MetricCard
-          label='Risk'
-          value={project.risk}
-          hint='QS assessment'
-          tone={project.risk === 'High' ? 'risk' : 'neutral'}
+          label='Status'
+          value={project.status}
+          hint='project lifecycle'
+          tone={projectMetricTone(project.status)}
         />
       </div>
       <div className='grid gap-4 xl:grid-cols-2'>
@@ -1152,7 +1209,7 @@ function DocumentsTab() {
   )
 }
 
-function TeamTab() {
+function TeamTab({ project }: { project: ApiProject }) {
   return (
     <Panel
       title='Project team'
@@ -1163,22 +1220,22 @@ function TeamTab() {
       }
     >
       <div className='divide-y divide-border'>
-        {projectTeam.length ? (
-          projectTeam.map((u) => (
+        {project.managers.length ? (
+          project.managers.map((u) => (
             <div key={u.email} className='flex items-center gap-3 py-2.5'>
               <span className='grid size-8 flex-none place-items-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground'>
-                {u.initials}
+                {memberInitials(u.full_name || u.email)}
               </span>
               <div className='flex-1'>
                 <div className='text-xs font-medium text-foreground'>
-                  {u.name}
+                  {u.full_name || u.email}
                 </div>
                 <div className='text-[11px] text-muted-foreground'>
                   {u.email}
                 </div>
               </div>
               <div className='rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground'>
-                {u.role}
+                Project Manager
               </div>
             </div>
           ))

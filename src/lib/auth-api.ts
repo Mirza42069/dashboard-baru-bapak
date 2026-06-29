@@ -231,6 +231,18 @@ export async function listProjects(token: string): Promise<{ data: Project[] }> 
   return res.json()
 }
 
+export async function getProject(
+  token: string,
+  projectId: string
+): Promise<{ project: Project }> {
+  const res = await fetch(`${BASE}/projects/${projectId}`, {
+    headers: { authorization: `Bearer ${token}` },
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
 export async function createProject(
   token: string,
   body: {

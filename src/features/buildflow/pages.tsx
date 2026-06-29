@@ -349,8 +349,8 @@ function ProjectCard({ project }: { project: ApiProject }) {
   const managers = project.managers.map((m) => m.full_name || m.email).join(', ')
   return (
     <Link
-      to='/projects/$code'
-      params={{ code: project.code || project.id }}
+      to='/projects/$id'
+      params={{ id: project.id }}
       className='block rounded-md border border-border bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md'
     >
       <div className='flex items-start justify-between gap-2'>
@@ -1061,8 +1061,8 @@ function ProjectTable({
             <tr key={project.code} className='group hover:bg-muted/40'>
               <td className='py-3'>
                 <Link
-                  to='/projects/$code'
-                  params={{ code: project.code }}
+                  to='/projects/$id'
+                  params={{ id: project.code }}
                   className='font-medium text-foreground hover:underline'
                 >
                   {project.name}

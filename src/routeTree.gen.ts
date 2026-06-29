@@ -30,7 +30,7 @@ import { Route as AuthenticatedSettingsNotificationsRouteImport } from './routes
 import { Route as AuthenticatedSettingsDisplayRouteImport } from './routes/_authenticated/settings/display'
 import { Route as AuthenticatedSettingsAppearanceRouteImport } from './routes/_authenticated/settings/appearance'
 import { Route as AuthenticatedSettingsAccountRouteImport } from './routes/_authenticated/settings/account'
-import { Route as AuthenticatedProjectsCodeRouteImport } from './routes/_authenticated/projects/$code'
+import { Route as AuthenticatedProjectsIdRouteImport } from './routes/_authenticated/projects/$id'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as authPlatformSignInRouteImport } from './routes/(auth)/platform/sign-in'
 
@@ -146,12 +146,11 @@ const AuthenticatedSettingsAccountRoute =
     path: '/account',
     getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
-const AuthenticatedProjectsCodeRoute =
-  AuthenticatedProjectsCodeRouteImport.update({
-    id: '/projects/$code',
-    path: '/projects/$code',
-    getParentRoute: () => AuthenticatedRouteRoute,
-  } as any)
+const AuthenticatedProjectsIdRoute = AuthenticatedProjectsIdRouteImport.update({
+  id: '/projects/$id',
+  path: '/projects/$id',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedErrorsErrorRoute =
   AuthenticatedErrorsErrorRouteImport.update({
     id: '/errors/$error',
@@ -179,7 +178,7 @@ export interface FileRoutesByFullPath {
   '/platform/': typeof PlatformIndexRoute
   '/platform/sign-in': typeof authPlatformSignInRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
-  '/projects/$code': typeof AuthenticatedProjectsCodeRoute
+  '/projects/$id': typeof AuthenticatedProjectsIdRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
@@ -203,7 +202,7 @@ export interface FileRoutesByTo {
   '/platform': typeof PlatformIndexRoute
   '/platform/sign-in': typeof authPlatformSignInRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
-  '/projects/$code': typeof AuthenticatedProjectsCodeRoute
+  '/projects/$id': typeof AuthenticatedProjectsIdRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/settings/display': typeof AuthenticatedSettingsDisplayRoute
@@ -230,7 +229,7 @@ export interface FileRoutesById {
   '/platform/': typeof PlatformIndexRoute
   '/(auth)/platform/sign-in': typeof authPlatformSignInRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
-  '/_authenticated/projects/$code': typeof AuthenticatedProjectsCodeRoute
+  '/_authenticated/projects/$id': typeof AuthenticatedProjectsIdRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
   '/_authenticated/settings/display': typeof AuthenticatedSettingsDisplayRoute
@@ -257,7 +256,7 @@ export interface FileRouteTypes {
     | '/platform/'
     | '/platform/sign-in'
     | '/errors/$error'
-    | '/projects/$code'
+    | '/projects/$id'
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/display'
@@ -281,7 +280,7 @@ export interface FileRouteTypes {
     | '/platform'
     | '/platform/sign-in'
     | '/errors/$error'
-    | '/projects/$code'
+    | '/projects/$id'
     | '/settings/account'
     | '/settings/appearance'
     | '/settings/display'
@@ -307,7 +306,7 @@ export interface FileRouteTypes {
     | '/platform/'
     | '/(auth)/platform/sign-in'
     | '/_authenticated/errors/$error'
-    | '/_authenticated/projects/$code'
+    | '/_authenticated/projects/$id'
     | '/_authenticated/settings/account'
     | '/_authenticated/settings/appearance'
     | '/_authenticated/settings/display'
@@ -482,11 +481,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsAccountRouteImport
       parentRoute: typeof AuthenticatedSettingsRouteRoute
     }
-    '/_authenticated/projects/$code': {
-      id: '/_authenticated/projects/$code'
-      path: '/projects/$code'
-      fullPath: '/projects/$code'
-      preLoaderRoute: typeof AuthenticatedProjectsCodeRouteImport
+    '/_authenticated/projects/$id': {
+      id: '/_authenticated/projects/$id'
+      path: '/projects/$id'
+      fullPath: '/projects/$id'
+      preLoaderRoute: typeof AuthenticatedProjectsIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/errors/$error': {
@@ -533,7 +532,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
-  AuthenticatedProjectsCodeRoute: typeof AuthenticatedProjectsCodeRoute
+  AuthenticatedProjectsIdRoute: typeof AuthenticatedProjectsIdRoute
   AuthenticatedHelpCenterIndexRoute: typeof AuthenticatedHelpCenterIndexRoute
   AuthenticatedProjectsIndexRoute: typeof AuthenticatedProjectsIndexRoute
   AuthenticatedTeamIndexRoute: typeof AuthenticatedTeamIndexRoute
@@ -543,7 +542,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
-  AuthenticatedProjectsCodeRoute: AuthenticatedProjectsCodeRoute,
+  AuthenticatedProjectsIdRoute: AuthenticatedProjectsIdRoute,
   AuthenticatedHelpCenterIndexRoute: AuthenticatedHelpCenterIndexRoute,
   AuthenticatedProjectsIndexRoute: AuthenticatedProjectsIndexRoute,
   AuthenticatedTeamIndexRoute: AuthenticatedTeamIndexRoute,
