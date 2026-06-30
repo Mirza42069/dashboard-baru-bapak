@@ -21,7 +21,7 @@ export const sidebarData: SidebarData = {
   },
   teams: [
     {
-      name: 'Buildflow',
+      name: 'Meru',
       logo: Command,
       plan: 'Construction SaaS',
     },

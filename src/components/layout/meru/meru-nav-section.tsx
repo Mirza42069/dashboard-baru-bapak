@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import type { WorkspaceLink } from './workspace-links'
 
-export function BuildFlowNavSection({
+export function MeruNavSection({
   items,
   title,
 }: {
@@ -20,7 +20,8 @@ export function BuildFlowNavSection({
             to={item.to}
             activeOptions={{ exact: item.to === '/' }}
             activeProps={{
-              className: 'bg-card text-foreground shadow-sm ring-1 ring-border',
+              className:
+                'font-medium text-[var(--lapis-600)] shadow-[inset_2px_0_0_var(--lapis-600)]',
             }}
             className='flex items-center gap-3 rounded-md px-3 py-2.5 text-sidebar-foreground/70 transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
           >

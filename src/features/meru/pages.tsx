@@ -97,7 +97,7 @@ export function TenantDashboard() {
       <Panel
         title='Project command panel'
         description='Prioritised setup and follow-up actions. Use Projects for the full register.'
-        className='mt-2 border-primary/20 bg-card/95 p-5 shadow-md'
+        className='mt-2 shadow-md'
         action={
           <Button variant='ghost' size='sm' asChild>
             <Link to='/projects'>
@@ -185,21 +185,26 @@ function ProjectSummaryTile({
   hint?: string
   tone?: 'good' | 'risk' | 'neutral'
 }) {
+  const surface =
+    tone === 'good'
+      ? 'border-[var(--status-ok-bd)] bg-[var(--status-ok-bg)]'
+      : tone === 'risk'
+        ? 'border-[var(--status-risk-bd)] bg-[var(--status-risk-bg)]'
+        : 'border-[var(--lapis-100)] bg-[var(--lapis-50)]'
+  const valueColor =
+    tone === 'good'
+      ? 'text-[var(--status-ok-fg)]'
+      : tone === 'risk'
+        ? 'text-[var(--status-risk-fg)]'
+        : 'text-[var(--lapis-700)]'
   return (
-    <div className='rounded-md border border-border bg-background/70 p-3'>
-      <div className='flex items-center justify-between gap-3 text-xs text-muted-foreground'>
-        <span>{label}</span>
-        <span
-          className={`size-2 rounded-full ${
-            tone === 'good'
-              ? 'bg-emerald-500'
-              : tone === 'risk'
-                ? 'bg-amber-500'
-                : 'bg-muted-foreground/35'
-          }`}
-        />
+    <div className={`rounded-md border p-3 ${surface}`}>
+      <div className='text-[10px] font-medium tracking-[0.08em] text-muted-foreground uppercase'>
+        {label}
       </div>
-      <div className='mt-2 text-xl font-semibold tracking-tight text-foreground'>
+      <div
+        className={`mt-1.5 font-mono text-xl font-semibold tracking-tight tabular-nums ${valueColor}`}
+      >
         {value}
       </div>
       {hint && (
@@ -344,15 +349,24 @@ export function ProjectsPage() {
   )
 }
 
+const accentColor: Record<string, string> = {
+  good: 'var(--status-ok-fg)',
+  risk: 'var(--status-risk-fg)',
+  danger: 'var(--status-behind-fg)',
+  muted: 'var(--stone-300)',
+}
+
 function ProjectCard({ project }: { project: ApiProject }) {
   const managers = project.managers
     .map((m) => m.full_name || m.email)
     .join(', ')
+  const accent = accentColor[statusTone(project.status)] ?? 'var(--lapis-500)'
   return (
     <Link
       to='/projects/$id'
       params={{ id: project.id }}
-      className='block rounded-md border border-border bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md'
+      style={{ borderInlineStartColor: accent }}
+      className='block rounded-md border border-border border-s-[3px] bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md'
     >
       <div className='flex items-start justify-between gap-2'>
         <div className='font-medium text-foreground'>{project.name}</div>
@@ -368,7 +382,10 @@ function ProjectCard({ project }: { project: ApiProject }) {
       </div>
       <div className='mt-3 flex items-center gap-3'>
         <Progress value={project.progress} className='h-2 flex-1 bg-muted' />
-        <span className='font-mono text-[11px] text-muted-foreground'>
+        <span
+          className='font-mono text-[11px] font-semibold tabular-nums'
+          style={{ color: accent }}
+        >
           {project.progress.toFixed(1)}%
         </span>
       </div>
@@ -545,7 +562,7 @@ export function TeamPage() {
                   style={{ gridTemplateColumns: MEMBER_GRID }}
                 >
                   <div className='flex items-center gap-2.5'>
-                    <span className='grid size-7 flex-none place-items-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground'>
+                    <span className='grid size-7 flex-none place-items-center rounded-full bg-[var(--lapis-100)] text-[10px] font-semibold text-[var(--lapis-700)]'>
                       {memberInitials(m.full_name || m.email)}
                     </span>
                     <span className='font-medium text-foreground'>
@@ -1080,16 +1097,23 @@ function AttentionCard({
   detail: string
   severity: 'Low' | 'Medium' | 'High'
 }) {
+  const high = severity === 'High'
   return (
-    <div className='flex gap-3 rounded-md border border-border bg-accent/40 p-3'>
-      <CircleAlert className='mt-0.5 size-4 text-amber-600' />
+    <div
+      className={`flex gap-3 rounded-md border p-3 ${
+        high
+          ? 'border-[var(--status-behind-bd)] bg-[var(--status-behind-bg)]'
+          : 'border-[var(--status-risk-bd)] bg-[var(--status-risk-bg)]'
+      }`}
+    >
+      <CircleAlert
+        className={`mt-0.5 size-4 ${high ? 'text-[var(--status-behind-fg)]' : 'text-[var(--status-risk-fg)]'}`}
+      />
       <div className='min-w-0 flex-1'>
         <div className='font-medium text-foreground'>{title}</div>
         <div className='text-xs text-muted-foreground'>{detail}</div>
       </div>
-      <StatusPill tone={severity === 'High' ? 'danger' : 'risk'}>
-        {severity}
-      </StatusPill>
+      <StatusPill tone={high ? 'danger' : 'risk'}>{severity}</StatusPill>
     </div>
   )
 }
@@ -1106,7 +1130,7 @@ function ActivityRow({
 }) {
   return (
     <div className='flex gap-3 py-3'>
-      <span className='mt-2 size-2 rounded-full bg-primary/35' />
+      <span className='mt-2 size-2 rounded-full bg-[var(--lapis-500)]' />
       <div className='min-w-0 flex-1'>
         <div>
           <span className='font-semibold text-foreground'>{actor}</span>{' '}
@@ -1130,8 +1154,8 @@ function MilestoneRow({
   status: string
 }) {
   return (
-    <div className='flex items-center gap-3 rounded-md border border-border bg-muted/40 p-3'>
-      <div className='grid size-11 place-items-center rounded-sm bg-card text-xs font-medium shadow-xs'>
+    <div className='flex items-center gap-3 rounded-md border border-[var(--lapis-100)] bg-[var(--lapis-50)] p-3'>
+      <div className='grid size-11 place-items-center rounded-sm border border-[var(--lapis-100)] bg-card font-mono text-xs font-semibold tabular-nums text-[var(--lapis-700)] shadow-xs'>
         {date}
       </div>
       <div className='min-w-0 flex-1'>

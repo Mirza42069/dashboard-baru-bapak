@@ -346,9 +346,10 @@ function ProjectStatusDropdown({
             <span
               className={cn(
                 'size-2 rounded-full',
-                statusTone(item.value) === 'good' && 'bg-emerald-500',
-                statusTone(item.value) === 'risk' && 'bg-amber-500',
-                statusTone(item.value) === 'danger' && 'bg-rose-500',
+                statusTone(item.value) === 'good' && 'bg-[var(--status-ok-fg)]',
+                statusTone(item.value) === 'risk' && 'bg-[var(--status-risk-fg)]',
+                statusTone(item.value) === 'danger' &&
+                  'bg-[var(--status-behind-fg)]',
                 statusTone(item.value) === 'muted' && 'bg-muted-foreground/35'
               )}
             />
@@ -1221,7 +1222,7 @@ function ItemComposerRow({
           title='Add (Enter)'
           disabled={!valid || busy}
           onClick={() => void submit()}
-          className='text-emerald-600 hover:text-emerald-700 disabled:opacity-40'
+          className='text-[var(--lapis-600)] hover:text-[var(--lapis-700)] disabled:opacity-40'
         >
           <Check className='size-4' />
         </button>
@@ -2189,7 +2190,7 @@ function ScheduleTab({ projectId }: { projectId: string }) {
                     <td
                       className={cn(
                         'p-2 text-right font-mono',
-                        bad ? 'text-amber-600' : 'text-muted-foreground'
+                        bad ? 'text-[var(--status-risk-fg)]' : 'text-muted-foreground'
                       )}
                       title={bad ? 'Row does not total 100%' : undefined}
                     >

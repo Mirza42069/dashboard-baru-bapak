@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 
-export function BuildFlowSideUtility({
+export function MeruSideUtility({
   icon: Icon,
   label,
 }: {

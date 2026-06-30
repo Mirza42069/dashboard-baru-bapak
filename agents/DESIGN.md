@@ -104,11 +104,11 @@ Each status is a hue **plus** a required shape and label (§3, colorblind safety
 
 ## 4. Typography
 
-**Families.** One engineered superfamily, two roles — coherent by construction, and the "engineered/carved" character fits a construction tool.
+**Families.** A humanist sans for everything UI, paired with a legible mono for data — soft, modern letterforms over a mechanical face, so the dashboard reads as approachable rather than cold.
 
-- `--font-sans: "IBM Plex Sans"` — all UI text and headings.
-- `--font-mono: "IBM Plex Mono"` — all numeric data: BoQ quantities, weights, deviation, money, chart axes, table number columns.
-- *(Optional)* `"IBM Plex Serif"` for the wordmark or a rare summit title only — skip by default; restraint over a third voice.
+- `--font-sans: "Plus Jakarta Sans"` — all UI text and headings. Rounded, humanist, and Indonesian-designed, so it quietly fits MERU's heritage without any ornament.
+- `--font-mono: "JetBrains Mono"` — all numeric data: BoQ quantities, weights, deviation, money, chart axes, table number columns. Friendly, even-width digits with strong tabular alignment.
+- No third voice — the wordmark and summit titles come from the sans at display weight, not a serif.
 
 The display register comes from **weight, size, and tracking of the sans**, not a decorative face. That is the minimal, precise choice this brief asks for.
 
@@ -308,8 +308,8 @@ Dark mode is deferred (light-first). Tokens are structured so a future `[data-th
   --chart-grid:var(--stone-200); --chart-datedate:var(--stone-300);
 
   /* type */
-  --font-sans:"IBM Plex Sans", system-ui, -apple-system, sans-serif;
-  --font-mono:"IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-sans:"Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  --font-mono:"JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   --text-2xs:11px; --text-xs:12px; --text-sm:13px; --text-base:14px; --text-md:16px;
   --text-lg:18px; --text-xl:22px; --text-2xl:28px; --text-3xl:36px;
   --fw-regular:400; --fw-medium:500; --fw-semibold:600;

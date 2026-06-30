@@ -14,12 +14,12 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
-import { BuildFlowBrand } from './buildflow-brand'
-import { BuildFlowNavSection } from './buildflow-nav-section'
+import { MeruBrand } from './meru-brand'
+import { MeruNavSection } from './meru-nav-section'
 import { TopbarThemeButton } from './topbar-theme-button'
 import { workspaceLinks } from './workspace-links'
 
-export function BuildFlowTopbar() {
+export function MeruTopbar() {
   const navigate = useNavigate()
   const location = useLocation()
   const { auth } = useAuthStore()
@@ -56,15 +56,15 @@ export function BuildFlowTopbar() {
           </Button>
         </SheetTrigger>
         <SheetContent side='left' className='w-72 bg-background p-0'>
-          <BuildFlowBrand />
+          <MeruBrand />
           <div className='p-3'>
-            <BuildFlowNavSection title='Workspace' items={workspaceLinks} />
+            <MeruNavSection title='Workspace' items={workspaceLinks} />
           </div>
         </SheetContent>
       </Sheet>
 
       <div className='hidden min-w-56 md:block'>
-        <BuildFlowBrand compact />
+        <MeruBrand compact />
       </div>
 
       <div className='ms-auto flex items-center gap-2 md:gap-3'>

@@ -16,20 +16,20 @@ export function Panel({
   return (
     <section
       className={cn(
-        'rounded-lg border border-border bg-card p-4 text-card-foreground shadow-sm',
+        'overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-sm',
         className
       )}
     >
-      <div className='mb-4 flex items-start justify-between gap-3'>
+      <div className='flex items-start justify-between gap-3 border-b border-[var(--lapis-100)] bg-[var(--lapis-50)] px-4 py-3'>
         <div>
-          <h2 className='font-semibold text-card-foreground'>{title}</h2>
+          <h2 className='font-semibold text-[var(--lapis-700)]'>{title}</h2>
           {description && (
             <p className='mt-1 text-xs text-muted-foreground'>{description}</p>
           )}
         </div>
         {action}
       </div>
-      {children}
+      <div className='p-4'>{children}</div>
     </section>
   )
 }

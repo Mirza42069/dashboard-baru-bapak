@@ -88,9 +88,9 @@
 }
 
 @theme inline {
-  --font-sans: Geist, sans-serif;
-  --font-mono: Geist Mono, monospace;
-  --font-serif: Noto Serif Georgian, ui-serif, serif;
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  --font-serif: ui-serif, Georgia, serif;
   --radius: 0.5rem;
   --tracking-tighter: calc(var(--tracking-normal) - 0.05em);
   --tracking-tight: calc(var(--tracking-normal) - 0.025em);
@@ -156,42 +156,64 @@
 }
 
 :root {
-  --background: oklch(0.9851 0 0);
-  --foreground: oklch(0 0 0);
-  --card: oklch(1 0 267.51);
-  --card-foreground: oklch(0.2103 0 267.51);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0 0 0);
-  --primary: oklch(0.5144 0.1605 267.44);
-  --primary-foreground: oklch(0.97 0.014 254.604);
-  --secondary: oklch(0.94 0 0);
-  --secondary-foreground: oklch(0.25 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.44 0 0);
-  --accent: oklch(0.9214 0.0248 257.65);
-  --accent-foreground: oklch(0.2571 0.1161 272.24);
-  --destructive: oklch(0.58 0.22 27);
-  --destructive-foreground: oklch(0.97 0.014 254.604);
-  --border: oklch(0.92 0 0);
-  --input: oklch(0.94 0 0);
-  --ring: oklch(0.5144 0.1605 267.44);
-  --chart-1: oklch(0.9214 0.0248 257.65);
-  --chart-2: oklch(0.7597 0.0804 267.01);
-  --chart-3: oklch(0.6083 0.1247 272.72);
-  --chart-4: oklch(0.5144 0.1605 267.44);
-  --chart-5: oklch(0.2571 0.1161 272.24);
+  /* MERU — andesite neutrals */
+  --stone-0: #ffffff; --stone-50: #f7f8f9; --stone-100: #eef0f2;
+  --stone-200: #e2e5e9; --stone-300: #cbd0d6; --stone-400: #9aa1aa;
+  --stone-500: #6e757e; --stone-600: #4e545c; --stone-700: #373c43;
+  --stone-800: #262a30; --stone-900: #171a1e;
+  /* MERU — lapis (interactive) + summit gold (mark only) */
+  --lapis-50: #edf0f7; --lapis-100: #d6dcec; --lapis-300: #8290c4;
+  --lapis-500: #3b4c86; --lapis-600: #2e3c6b; --lapis-700: #243154;
+  --gold-500: #b0873b;
+  /* MERU — status (schedule signaling): fg / bg / border */
+  --status-ahead-fg: #1f6473; --status-ahead-bg: #e0eef0; --status-ahead-bd: #b3d5db;
+  --status-ok-fg: #3f6f46; --status-ok-bg: #e6f0e7; --status-ok-bd: #bfd8c2;
+  --status-risk-fg: #9c6b12; --status-risk-bg: #f7eeda; --status-risk-bd: #e8d3a6;
+  --status-behind-fg: #a23a2a; --status-behind-bg: #f7e7e3; --status-behind-bd: #e6c3bb;
+  --status-none-fg: #6e757e; --status-none-bg: #eef0f2; --status-none-bd: #e2e5e9;
+  /* MERU — chart */
+  --chart-planned: var(--stone-400); --chart-actual: var(--lapis-600);
+  --chart-grid: var(--stone-200); --chart-datedate: var(--stone-300);
+
+  /* lapis-tinted ambient background so white cards read as elevated */
+  --stone-tint: #eef1f9;
+
+  --background: var(--stone-tint);
+  --foreground: var(--stone-900);
+  --card: var(--stone-0);
+  --card-foreground: var(--stone-900);
+  --popover: var(--stone-0);
+  --popover-foreground: var(--stone-900);
+  --primary: var(--lapis-600);
+  --primary-foreground: #ffffff;
+  --secondary: var(--stone-100);
+  --secondary-foreground: var(--stone-700);
+  --muted: var(--stone-100);
+  --muted-foreground: var(--stone-500);
+  --accent: var(--lapis-50);
+  --accent-foreground: var(--lapis-700);
+  --destructive: var(--status-behind-fg);
+  --destructive-foreground: #ffffff;
+  --border: var(--stone-200);
+  --input: var(--stone-300);
+  --ring: var(--lapis-600);
+  --chart-1: var(--lapis-600);
+  --chart-2: var(--stone-400);
+  --chart-3: var(--status-ahead-fg);
+  --chart-4: var(--status-behind-fg);
+  --chart-5: var(--stone-300);
   --radius: 0.5rem;
-  --sidebar: oklch(1 0 267.51);
-  --sidebar-foreground: oklch(0 0 0);
-  --sidebar-primary: oklch(0.5144 0.1605 267.44);
-  --sidebar-primary-foreground: oklch(0.97 0.014 254.604);
-  --sidebar-accent: oklch(0.9214 0.0248 257.65);
-  --sidebar-accent-foreground: oklch(0.2571 0.1161 272.24);
-  --sidebar-border: oklch(0.92 0 0);
-  --sidebar-ring: oklch(0.5144 0.1605 267.44);
-  --font-sans: Geist, sans-serif;
-  --font-serif: Noto Serif Georgian, ui-serif, serif;
-  --font-mono: Geist Mono, monospace;
+  --sidebar: var(--stone-0);
+  --sidebar-foreground: var(--stone-700);
+  --sidebar-primary: var(--lapis-600);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--lapis-50);
+  --sidebar-accent-foreground: var(--lapis-700);
+  --sidebar-border: var(--stone-200);
+  --sidebar-ring: var(--lapis-600);
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-serif: ui-serif, Georgia, serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
   --shadow-color: oklch(0.2571 0.1161 272.24);
   --shadow-opacity: 0.15;
   --shadow-blur: 3px;

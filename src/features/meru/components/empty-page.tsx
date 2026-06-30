@@ -10,7 +10,7 @@ export function EmptyPage({
 }) {
   return (
     <>
-      <PageHeader eyebrow='BuildFlow' title={title} description={description} />
+      <PageHeader eyebrow='MERU' title={title} description={description} />
       <Panel title='No content available'>
         <div className='rounded-sm border border-dashed border-border bg-muted/40 p-10 text-center text-muted-foreground'>
           There is no data to display yet.
