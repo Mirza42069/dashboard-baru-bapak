@@ -206,14 +206,50 @@ export function ProjectDetailPage() {
   )
 }
 
+// Active BoQ total for a project. null = no active version / not loaded yet.
+function useBoqTotal(projectId: string) {
+  const { auth } = useAuthStore()
+  const token = auth.accessToken
+  const [total, setTotal] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (!token) return
+    let cancelled = false
+    void (async () => {
+      try {
+        const { data: versions } = await listBoqVersions(token, projectId)
+        const active = versions.find((v) => v.status === 'active')
+        if (!active) return
+        const { data: items } = await listBoqItems(token, active.id)
+        if (cancelled) return
+        const sum = buildSections(items).reduce(
+          (s, sec) => s + sectionAmount(sec),
+          0
+        )
+        setTotal(sum)
+      } catch (err) {
+        if (!cancelled) toast.error(errMsg(err))
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [token, projectId])
+
+  return total
+}
+
 function OverviewTab({ project }: { project: ApiProject }) {
+  // Contract value = sum of the active BoQ version (null until loaded/none).
+  const boqTotal = useBoqTotal(project.id)
+  const contractValue = boqTotal == null ? 'Not set' : formatMoney(boqTotal)
   const projectMeta: [string, string][] = [
     ['Client', project.client.name],
     ['Project code', project.code || 'Not set'],
     ['Description', project.description || 'Not set'],
     ['Location', project.location || 'Not set'],
     ['Contract number', project.contract_no || 'Not set'],
-    ['Contract value', formatMoney(project.contract_value)],
+    ['Contract value', contractValue],
     ['Contract start', formatDate(project.contract_start)],
     ['Contract finish', formatDate(project.contract_finish)],
     ['Reporting period', project.period_type],
@@ -236,8 +272,8 @@ function OverviewTab({ project }: { project: ApiProject }) {
         />
         <MetricCard
           label='Contract value'
-          value={formatMoney(project.contract_value)}
-          hint='current revision'
+          value={contractValue}
+          hint='active BoQ total'
         />
         <MetricCard
           label='Managers'

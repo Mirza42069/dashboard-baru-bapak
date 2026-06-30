@@ -596,7 +596,6 @@ const emptyProjectForm = {
   description: '',
   location: '',
   contract_no: '',
-  contract_value: '',
   contract_start: '',
   contract_finish: '',
   period_type: 'weekly' as ApiProject['period_type'],
@@ -700,7 +699,6 @@ function NewProjectDialog({
         description: form.description || null,
         location: form.location || null,
         contract_no: form.contract_no || null,
-        contract_value: form.contract_value ? Number(form.contract_value) : null,
         contract_start: form.contract_start || null,
         contract_finish: form.contract_finish || null,
         period_type: form.period_type,
@@ -833,18 +831,7 @@ function NewProjectDialog({
                 />
               </div>
             </div>
-            <div className='grid gap-4 md:grid-cols-3'>
-              <div className='grid gap-2'>
-                <Label htmlFor='contract-value'>Contract value</Label>
-                <Input
-                  id='contract-value'
-                  type='number'
-                  min='0'
-                  step='0.01'
-                  value={form.contract_value}
-                  onChange={(e) => setForm({ ...form, contract_value: e.target.value })}
-                />
-              </div>
+            <div className='grid gap-4 md:grid-cols-2'>
               <div className='grid gap-2'>
                 <Label htmlFor='contract-start'>Contract start</Label>
                 <Input
