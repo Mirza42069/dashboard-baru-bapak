@@ -170,7 +170,7 @@ export function ProjectDetailPage() {
         <span className='font-medium text-foreground'>{tabLabel}</span>
       </div>
 
-      <div className='mb-4 flex flex-wrap items-start justify-between gap-4'>
+      <div className='mb-6 flex flex-wrap items-start justify-between gap-4'>
         <div>
           <div className='flex items-center gap-3'>
             <h1 className='text-2xl font-semibold tracking-tight text-foreground'>
@@ -185,9 +185,7 @@ export function ProjectDetailPage() {
           </div>
         </div>
         <div className='text-right'>
-          <div className='text-[10px] tracking-[0.16em] text-muted-foreground uppercase'>
-            Overall progress
-          </div>
+          <div className='text-xs text-muted-foreground'>Overall progress</div>
           <div className='font-mono text-xl font-semibold text-foreground'>
             0%
           </div>
@@ -289,27 +287,16 @@ function OverviewTab({ project }: { project: ApiProject }) {
   return (
     <div>
       <div className='mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
-        <MetricCard
-          label='Progress'
-          value='0%'
-          hint='earned value basis'
-          tone='good'
-        />
-        <MetricCard
-          label='Contract value'
-          value={contractValue}
-          hint='active BoQ total'
-        />
+        <MetricCard label='Progress' value='0%' tone='good' />
+        <MetricCard label='Contract value' value={contractValue} />
         <MetricCard
           label='Managers'
           value={String(project.managers.length)}
-          hint='assigned users'
           tone='neutral'
         />
         <MetricCard
           label='Status'
           value={project.status}
-          hint='project lifecycle'
           tone={projectMetricTone(project.status)}
         />
       </div>

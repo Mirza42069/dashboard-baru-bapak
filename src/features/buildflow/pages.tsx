@@ -78,9 +78,7 @@ export function TenantDashboard() {
   return (
     <>
       <PageHeader
-        eyebrow='Construction manager'
         title='Portfolio command centre'
-        description='Track delivery, budget drift, BoQ verification, and live integration health across the tenant workspace.'
         action={<NewProjectDialog />}
       />
       <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
@@ -88,11 +86,8 @@ export function TenantDashboard() {
           <MetricCard key={metric.label} {...metric} />
         ))}
       </div>
-      <div className='mt-4 grid gap-4 xl:grid-cols-[1.35fr_0.9fr]'>
-        <Panel
-          title='Spend curve'
-          description='Planned vs actual portfolio spend, Rp juta'
-        >
+      <div className='mt-6 grid gap-4 xl:grid-cols-[1.35fr_0.9fr]'>
+        <Panel title='Spend curve · Rp juta'>
           {spendSeries.length ? (
             <ChartContainer config={spendConfig} className='h-64 w-full'>
               <AreaChart
@@ -141,10 +136,7 @@ export function TenantDashboard() {
             <EmptyState message='No spend data available.' />
           )}
         </Panel>
-        <Panel
-          title='Needs attention'
-          description='Items blocking clean project delivery'
-        >
+        <Panel title='Needs attention'>
           {attentionItems.length ? (
             <div className='space-y-2'>
               {attentionItems.map((item) => (
@@ -156,10 +148,9 @@ export function TenantDashboard() {
           )}
         </Panel>
       </div>
-      <div className='mt-4 grid gap-4 xl:grid-cols-[1.45fr_0.95fr]'>
+      <div className='mt-6 grid gap-4 xl:grid-cols-[1.45fr_0.95fr]'>
         <Panel
           title='Active projects'
-          description='Live delivery status from BoQ and programme updates'
           action={
             <Button variant='ghost' size='sm'>
               View all <ArrowUpRight className='size-3' />
@@ -168,7 +159,7 @@ export function TenantDashboard() {
         >
           <ProjectTable compact />
         </Panel>
-        <Panel title='Connected systems' description='Integration status'>
+        <Panel title='Connected systems'>
           {systems.length ? (
             <div className='divide-y divide-border'>
               {systems.map((system) => (
@@ -180,7 +171,7 @@ export function TenantDashboard() {
           )}
         </Panel>
       </div>
-      <div className='mt-4 grid gap-4 xl:grid-cols-2'>
+      <div className='mt-6 grid gap-4 xl:grid-cols-2'>
         <Panel title='Recent activity'>
           {activity.length ? (
             <div className='divide-y divide-border'>
@@ -257,40 +248,22 @@ export function ProjectsPage() {
   return (
     <>
       <PageHeader
-        eyebrow='Tenant workspace'
         title='Projects'
-        description='Project register with search, status filtering, and delivery signals.'
         action={<NewProjectDialog onCreated={refreshProjects} />}
       />
       <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
         <MetricCard
           label='Open projects'
           value={String(rows.length)}
-          hint='current total'
           tone='good'
         />
-        <MetricCard
-          label='Average progress'
-          value='0%'
-          hint='no project data'
-        />
-        <MetricCard
-          label='At risk / delayed'
-          value='0'
-          hint='need review'
-          tone='risk'
-        />
-        <MetricCard
-          label='Budget pressure'
-          value='Rp 0'
-          hint='forecast variance'
-          tone='risk'
-        />
+        <MetricCard label='Average progress' value='0%' />
+        <MetricCard label='At risk / delayed' value='0' tone='risk' />
+        <MetricCard label='Budget pressure' value='Rp 0' tone='risk' />
       </div>
       <Panel
         title='Project register'
-        description='Filter and inspect project status'
-        className='mt-4'
+        className='mt-6'
         action={
           <Button variant='outline' size='sm'>
             <SlidersHorizontal className='size-3.5' /> Columns

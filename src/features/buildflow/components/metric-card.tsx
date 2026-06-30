@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils'
 type MetricCardProps = {
   label: string
   value: string
-  hint: string
+  hint?: string
   tone?: 'good' | 'risk' | 'neutral'
 }
 
@@ -16,9 +16,7 @@ export function MetricCard({
   return (
     <div className='group rounded-md border border-border bg-card p-4 text-card-foreground shadow-sm transition hover:-translate-y-0.5 hover:shadow-md'>
       <div className='flex items-center justify-between gap-3'>
-        <div className='text-[10px] tracking-[0.16em] text-muted-foreground uppercase'>
-          {label}
-        </div>
+        <div className='text-xs text-muted-foreground'>{label}</div>
         <span
           className={cn(
             'size-2 rounded-full',
@@ -31,7 +29,7 @@ export function MetricCard({
       <div className='mt-3 text-2xl font-semibold tracking-tight text-card-foreground'>
         {value}
       </div>
-      <div className='mt-1 text-xs text-muted-foreground'>{hint}</div>
+      {hint && <div className='mt-1 text-xs text-muted-foreground'>{hint}</div>}
     </div>
   )
 }
