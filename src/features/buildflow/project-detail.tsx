@@ -19,6 +19,7 @@ import {
   createBoqVersion,
   deleteBoqItem,
   generatePeriods,
+  getProgressReport,
   getProject,
   listBoqItems,
   listBoqVersions,
@@ -27,10 +28,12 @@ import {
   patchBoqItem,
   recalcBoqWeights,
   saveDistribution,
+  savePeriodProgress,
   updateProjectStatus,
   type BoqItem,
   type BoqItemInput,
   type BoqVersion,
+  type ProgressEntry,
   type Project as ApiProject,
   type ReportingPeriod,
 } from '@/lib/auth-api'
@@ -65,11 +68,8 @@ import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { boqUnits, idr } from './boq'
 import { EmptyState, MetricCard, Panel, StatusPill } from './components'
-import { systems } from './data'
 
 const workPackages: { name: string; pct: number }[] = []
-
-const progressKpis: { label: string; value: string; sub: string }[] = []
 
 const documents: {
   name: string
@@ -1462,15 +1462,20 @@ function RevisionHistory({
 
 const sCurveConfig = {
   planned: { label: 'Planned', color: 'var(--primary)' },
+  actual: { label: 'Actual', color: 'var(--chart-2)' },
 } satisfies ChartConfig
 
-// Read-only snapshot of the active baseline's planned curve, for the Progress tab.
-function usePlannedSchedule(projectId: string) {
+type ProgressSaveChange = { periodId: string; item: BoqItem; value: number }
+
+function useProgressSchedule(projectId: string) {
   const { auth } = useAuthStore()
   const token = auth.accessToken
   const [loading, setLoading] = useState(true)
   const [version, setVersion] = useState<BoqVersion | null>(null)
   const [periods, setPeriods] = useState<ReportingPeriod[]>([])
+  const [items, setItems] = useState<BoqItem[]>([])
+  const [entries, setEntries] = useState<ProgressEntry[]>([])
+  const [dataDate, setDataDate] = useState<string | null>(null)
   const [curve, setCurve] = useState<{
     weekly: number[]
     cumulative: number[]
@@ -1479,53 +1484,93 @@ function usePlannedSchedule(projectId: string) {
     cumulative: [],
   })
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!token) return
-    let cancelled = false
-    void (async () => {
-      setLoading(true)
-      try {
-        const [{ data: versions }, { data: per }] = await Promise.all([
-          listBoqVersions(token, projectId),
-          listPeriods(token, projectId),
+    setLoading(true)
+    try {
+      const [{ data: versions }, { data: per }, report] = await Promise.all([
+        listBoqVersions(token, projectId),
+        listPeriods(token, projectId),
+        getProgressReport(token, projectId),
+      ])
+      const ver = versions.find((v) => v.status === 'active') ?? null
+      setVersion(ver)
+      setPeriods(per)
+      setEntries(report.entries)
+      setDataDate(report.data_date)
+      if (ver && per.length) {
+        const [{ data: its }, { data: dist }] = await Promise.all([
+          listBoqItems(token, ver.id),
+          listDistribution(token, ver.id),
         ])
-        const ver = versions.find((v) => v.status === 'active') ?? null
-        if (cancelled) return
-        setVersion(ver)
-        setPeriods(per)
-        if (ver && per.length) {
-          const [{ data: its }, { data: dist }] = await Promise.all([
-            listBoqItems(token, ver.id),
-            listDistribution(token, ver.id),
-          ])
-          if (cancelled) return
-          const cells = new Map<string, number>()
-          for (const c of dist)
-            cells.set(`${c.boq_item_id}|${c.period_id}`, num(c.planned_pct))
-          setCurve(computePlannedCurve(scheduleRows(its), per, cells))
-        } else {
-          setCurve({ weekly: [], cumulative: [] })
-        }
-      } catch (err) {
-        if (!cancelled) toast.error(errMsg(err))
-      } finally {
-        if (!cancelled) setLoading(false)
+        setItems(its)
+        const cells = new Map<string, number>()
+        for (const c of dist)
+          cells.set(`${c.boq_item_id}|${c.period_id}`, num(c.planned_pct))
+        setCurve(computePlannedCurve(scheduleRows(its), per, cells))
+      } else {
+        setItems([])
+        setCurve({ weekly: [], cumulative: [] })
       }
-    })()
-    return () => {
-      cancelled = true
+    } catch (err) {
+      toast.error(errMsg(err))
+    } finally {
+      setLoading(false)
     }
   }, [token, projectId])
 
-  return { loading, version, periods, curve }
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const save = async (changes: ProgressSaveChange[]) => {
+    if (!token) return
+    const byPeriod = new Map<string, Parameters<typeof savePeriodProgress>[2]>()
+    for (const change of changes) {
+      const periodEntries = byPeriod.get(change.periodId) ?? []
+      periodEntries.push(
+        change.item.progress_mode === 'by_quantity'
+          ? {
+              boq_item_id: change.item.id,
+              cumulative_quantity: change.value,
+            }
+          : {
+              boq_item_id: change.item.id,
+              cumulative_percent: change.value,
+            }
+      )
+      byPeriod.set(change.periodId, periodEntries)
+    }
+    for (const [periodId, periodEntries] of byPeriod) {
+      await savePeriodProgress(token, periodId, periodEntries)
+    }
+    await load()
+  }
+
+  return { loading, version, periods, items, entries, dataDate, curve, save }
 }
 
 function ProgressTab({ projectId }: { projectId: string }) {
-  const { loading, version, periods, curve } = usePlannedSchedule(projectId)
+  const { loading, version, periods, items, entries, dataDate, curve, save } =
+    useProgressSchedule(projectId)
+  const rows = scheduleRows(items)
+  const actual = computeActualCurve(rows, periods, entries, dataDate)
   const data = periods.map((p, i) => ({
     period: p.label ?? `#${p.period_index}`,
+    endDate: p.end_date,
     planned: Number((curve.cumulative[i] ?? 0).toFixed(2)),
+    actual:
+      actual.cumulative[i] == null
+        ? null
+        : Number(actual.cumulative[i]!.toFixed(2)),
   }))
+  const latestActual =
+    [...actual.cumulative].reverse().find((v) => v != null) ?? 0
+  const latestPlanned =
+    dataDate == null
+      ? 0
+      : (data.find((p) => p.endDate === dataDate)?.planned ?? 0)
+  const deviation = latestActual - latestPlanned
   return (
     <div>
       <div className='mb-4 grid gap-4 xl:grid-cols-[1.5fr_1fr]'>
@@ -1576,31 +1621,261 @@ function ProgressTab({ projectId }: { projectId: string }) {
                   fill='url(#planned-area)'
                   strokeWidth={2}
                 />
+                <Area
+                  dataKey='actual'
+                  type='monotone'
+                  stroke='var(--chart-2)'
+                  fill='transparent'
+                  strokeWidth={2}
+                  connectNulls={false}
+                />
               </AreaChart>
             </ChartContainer>
           )}
         </Panel>
         <div className='grid gap-4'>
-          {progressKpis.length ? (
-            progressKpis.map((k) => (
-              <MetricCard
-                key={k.label}
-                label={k.label}
-                value={k.value}
-                hint={k.sub}
-              />
-            ))
-          ) : (
-            <EmptyState message='No progress metrics available.' />
-          )}
+          <MetricCard
+            label='Actual progress'
+            value={`${latestActual.toFixed(1)}%`}
+            hint={
+              dataDate
+                ? `As of ${formatDate(dataDate)}`
+                : 'No actual entries yet'
+            }
+          />
+          <MetricCard
+            label='Planned at data date'
+            value={`${latestPlanned.toFixed(1)}%`}
+          />
+          <MetricCard
+            label='Deviation'
+            value={`${deviation >= 0 ? '+' : ''}${deviation.toFixed(1)}%`}
+            tone={deviation >= 0 ? 'good' : 'risk'}
+          />
         </div>
       </div>
-      <div className='grid gap-4 xl:grid-cols-2'>
-        <Panel title='Progress by work package'>
-          <WorkPackages />
-        </Panel>
-      </div>
+      {version && periods.length ? (
+        <ProgressEntryMatrix
+          rows={rows}
+          periods={periods}
+          entries={entries}
+          onSave={save}
+        />
+      ) : null}
     </div>
+  )
+}
+
+function computeActualCurve(
+  rows: ScheduleRow[],
+  periods: ReportingPeriod[],
+  entries: ProgressEntry[],
+  dataDate: string | null
+) {
+  const byKey = new Map<string, number>()
+  for (const e of entries)
+    byKey.set(`${e.boq_item_id}|${e.period_id}`, num(e.pct_complete))
+  const cumulative: (number | null)[] = []
+  for (const p of periods) {
+    if (dataDate && p.end_date > dataDate) {
+      cumulative.push(null)
+      continue
+    }
+    let actual = 0
+    for (const r of rows) {
+      let pct = 0
+      for (const prior of periods) {
+        if (prior.end_date > p.end_date) break
+        pct = byKey.get(`${r.leaf.id}|${prior.id}`) ?? pct
+      }
+      actual += (num(r.leaf.weight) * pct) / 100
+    }
+    cumulative.push(actual)
+  }
+  return { cumulative }
+}
+
+function ProgressEntryMatrix({
+  rows,
+  periods,
+  entries,
+  onSave,
+}: {
+  rows: ScheduleRow[]
+  periods: ReportingPeriod[]
+  entries: ProgressEntry[]
+  onSave: (changes: ProgressSaveChange[]) => Promise<void>
+}) {
+  const [saving, setSaving] = useState(false)
+  const [drafts, setDrafts] = useState<Map<string, string>>(new Map())
+  const [originals, setOriginals] = useState<Map<string, string>>(new Map())
+  const [dirty, setDirty] = useState<Set<string>>(new Set())
+  const keyOf = (itemId: string, periodId: string) => `${itemId}|${periodId}`
+  const entry = (itemId: string, periodId: string) =>
+    entries.find((e) => e.boq_item_id === itemId && e.period_id === periodId)
+  const value = (item: BoqItem, periodId: string) => {
+    const e = entry(item.id, periodId)
+    const raw =
+      item.progress_mode === 'by_quantity'
+        ? e?.cumulative_quantity
+        : e?.cumulative_percent
+    return raw == null ? '' : String(num(raw))
+  }
+
+  useEffect(() => {
+    const next = new Map<string, string>()
+    for (const row of rows) {
+      for (const period of periods) {
+        next.set(keyOf(row.leaf.id, period.id), value(row.leaf, period.id))
+      }
+    }
+    setDrafts(next)
+    setOriginals(next)
+    setDirty(new Set())
+  }, [rows, periods, entries])
+
+  const setCell = (key: string, nextValue: string) => {
+    setDrafts((current) => {
+      const next = new Map(current)
+      next.set(key, nextValue)
+      return next
+    })
+    setDirty((current) => {
+      const next = new Set(current)
+      if (nextValue === (originals.get(key) ?? '')) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  const saveAll = async () => {
+    if (!dirty.size) return
+    const itemById = new Map(rows.map((r) => [r.leaf.id, r.leaf]))
+    const changes = [...dirty].flatMap((key) => {
+      const [itemId, periodId] = key.split('|')
+      const item = itemById.get(itemId)
+      return item
+        ? [{ periodId, item, value: Number(drafts.get(key)) || 0 }]
+        : []
+    })
+    setSaving(true)
+    try {
+      await onSave(changes)
+      toast.success('Progress saved.')
+    } catch (err) {
+      toast.error(errMsg(err))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const stickyHead = 'sticky left-0 z-10 bg-muted/60 p-2 text-left'
+  const stickyCell = 'sticky left-0 z-10 bg-card p-2'
+  return (
+    <Panel
+      title='Actual progress entry'
+      description='Enter cumulative actual progress for each reporting period.'
+      action={
+        <Button
+          size='sm'
+          className='rounded-md text-xs'
+          disabled={saving || !dirty.size}
+          onClick={() => void saveAll()}
+        >
+          {saving
+            ? 'Saving...'
+            : dirty.size
+              ? `Save progress (${dirty.size})`
+              : 'Save progress'}
+        </Button>
+      }
+    >
+      <div className='overflow-x-auto rounded-lg border border-border bg-card'>
+        <table className='border-collapse text-xs'>
+          <thead>
+            <tr className='bg-muted/60 text-[10px] tracking-wide text-muted-foreground uppercase'>
+              <th className={cn(stickyHead, 'min-w-[240px]')}>Item</th>
+              {periods.map((p) => (
+                <th
+                  key={p.id}
+                  className='min-w-[70px] p-2 text-center font-mono'
+                  title={`${p.start_date} → ${p.end_date}`}
+                >
+                  {p.label ?? p.period_index}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, idx) => {
+              const newSection =
+                idx === 0 || rows[idx - 1].section !== r.section
+              return (
+                <Fragment key={r.leaf.id}>
+                  {newSection && (
+                    <tr className='bg-muted/30'>
+                      <td
+                        className={cn(
+                          stickyCell,
+                          'bg-muted/30 font-semibold text-foreground'
+                        )}
+                      >
+                        {r.section}
+                      </td>
+                      <td colSpan={periods.length} />
+                    </tr>
+                  )}
+                  <tr className='border-t border-border/60'>
+                    <td className={stickyCell}>
+                      <span className='font-mono text-[11px] text-muted-foreground'>
+                        {r.leaf.code}
+                      </span>{' '}
+                      <span className='text-foreground'>
+                        {r.leaf.description}
+                      </span>
+                      <span className='ms-1 text-[10px] text-muted-foreground'>
+                        (
+                        {r.leaf.progress_mode === 'by_quantity'
+                          ? (r.leaf.unit ?? 'qty')
+                          : '%'}
+                        )
+                      </span>
+                    </td>
+                    {periods.map((p) => {
+                      const key = keyOf(r.leaf.id, p.id)
+                      return (
+                        <td
+                          key={p.id}
+                          className='border-l border-border/40 p-0 text-center'
+                        >
+                          <input
+                            type='number'
+                            min='0'
+                            max={
+                              r.leaf.progress_mode === 'by_percent'
+                                ? '100'
+                                : undefined
+                            }
+                            value={drafts.get(key) ?? ''}
+                            disabled={saving}
+                            onChange={(e) => setCell(key, e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter')
+                                (e.target as HTMLInputElement).blur()
+                            }}
+                            className='h-7 w-full bg-transparent px-1 text-center font-mono text-xs outline-none focus:bg-primary/10 disabled:opacity-50'
+                          />
+                        </td>
+                      )
+                    })}
+                  </tr>
+                </Fragment>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Panel>
   )
 }
 

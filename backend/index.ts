@@ -10,6 +10,7 @@ import { clientsRouter } from './routes/clients'
 import { projectsRouter } from './routes/projects'
 import { boqRouter } from './routes/boq'
 import { scheduleRouter } from './routes/schedule'
+import { progressRouter } from './routes/progress'
 
 const app = express()
 app.use(express.json())
@@ -28,6 +29,7 @@ app.use('/api/v1', clientsRouter)
 app.use('/api/v1', projectsRouter)
 app.use('/api/v1', boqRouter)
 app.use('/api/v1', scheduleRouter)
+app.use('/api/v1', progressRouter)
 
 app.use(errorHandler)
 

@@ -534,6 +534,71 @@ export async function saveDistribution(
   return res.json()
 }
 
+// ---- actual progress -------------------------------------------------------
+
+export type ProgressEntry = {
+  id: string
+  project_id: string
+  period_id: string
+  boq_item_id: string
+  cumulative_quantity: string | number | null
+  cumulative_percent: string | number | null
+  pct_complete: string | number
+  note: string | null
+  recorded_at: string
+  recorded_by: string | null
+}
+
+export type PeriodSummary = {
+  period_id: string
+  planned_cumulative_pct: string | number | null
+  actual_cumulative_pct: string | number | null
+  planned_weekly_pct: string | number | null
+  actual_weekly_pct: string | number | null
+  deviation_pct: string | number | null
+  schedule_ratio: string | number | null
+  computed_at: string
+}
+
+export type ProgressReport = {
+  data_date: string | null
+  baseline_version: number | null
+  entries: ProgressEntry[]
+  summaries: PeriodSummary[]
+}
+
+export async function getProgressReport(
+  token: string,
+  projectId: string
+): Promise<ProgressReport> {
+  const res = await fetch(`${BASE}/projects/${projectId}/progress-report`, {
+    headers: { authorization: `Bearer ${token}` },
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function savePeriodProgress(
+  token: string,
+  periodId: string,
+  entries: {
+    boq_item_id: string
+    cumulative_quantity?: number | null
+    cumulative_percent?: number | null
+    note?: string | null
+  }[]
+): Promise<{ data: ProgressEntry[] }> {
+  const res = await fetch(`${BASE}/periods/${periodId}/progress:bulk`, {
+    method: 'PUT',
+    headers: tenantJsonHeaders(token),
+    credentials: 'include',
+    body: JSON.stringify({ entries }),
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
 export async function listPlatformTenants(
   token: string
 ): Promise<{ data: PlatformTenant[] }> {
