@@ -192,7 +192,7 @@
   --popover: var(--stone-0);
   --popover-foreground: var(--stone-900);
   --primary: var(--lapis-600);
-  --primary-foreground: #2e2404;
+  --primary-foreground: #ffffff;
   --secondary: var(--stone-100);
   --secondary-foreground: var(--stone-700);
   --muted: var(--stone-100);
@@ -211,12 +211,12 @@
   --chart-5: var(--stone-300);
   --radius: 0.5rem;
   /* the spine is a solid yellow panel — the signature surface (dark ink) */
-  --sidebar: #f2b705;
-  --sidebar-foreground: #5a4708;
+  --sidebar: var(--primary);
+  --sidebar-foreground: #ffffff;
   --sidebar-primary: #3a2d05;
   --sidebar-primary-foreground: #f2b705;
   --sidebar-accent: #e0a800;
-  --sidebar-accent-foreground: #2e2404;
+  --sidebar-accent-foreground: #ffffff;
   --sidebar-border: #dda400;
   --sidebar-ring: #2e2404;
   --font-sans: 'Geist', system-ui, -apple-system, sans-serif;

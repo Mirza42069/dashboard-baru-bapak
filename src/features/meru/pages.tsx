@@ -185,12 +185,6 @@ function ProjectSummaryTile({
   hint?: string
   tone?: 'good' | 'risk' | 'neutral'
 }) {
-  const edge =
-    tone === 'good'
-      ? 'var(--status-ok-fg)'
-      : tone === 'risk'
-        ? 'var(--status-risk-fg)'
-        : 'var(--lapis-600)'
   const valueColor =
     tone === 'good'
       ? 'text-[var(--status-ok-fg)]'
@@ -198,10 +192,7 @@ function ProjectSummaryTile({
         ? 'text-[var(--status-risk-fg)]'
         : 'text-foreground'
   return (
-    <div
-      style={{ borderInlineStartColor: edge }}
-      className='rounded-md border border-s-[3px] border-border bg-card p-3'
-    >
+    <div className='rounded-md border border-border bg-card p-3'>
       <div className='text-[10px] font-medium tracking-[0.08em] text-muted-foreground uppercase'>
         {label}
       </div>
@@ -368,8 +359,7 @@ function ProjectCard({ project }: { project: ApiProject }) {
     <Link
       to='/projects/$id'
       params={{ id: project.id }}
-      style={{ borderInlineStartColor: accent }}
-      className='block rounded-md border border-border border-s-[3px] bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md'
+      className='block rounded-md border border-border bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md'
     >
       <div className='flex items-start justify-between gap-2'>
         <div className='font-medium text-foreground'>{project.name}</div>
