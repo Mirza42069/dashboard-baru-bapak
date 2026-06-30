@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from '@tanstack/react-router'
 import {
   Check,
@@ -8,6 +8,7 @@ import {
   Plus,
   Trash2,
   Upload,
+  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -36,7 +37,6 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command'
-import { Input } from '@/components/ui/input'
 import {
   Popover,
   PopoverContent,
@@ -323,6 +323,17 @@ function buildSections(items: BoqItem[]): Section[] {
     }))
 }
 
+// A section rolls up its children; with no children it prices itself (one row).
+const leafAmount = (l: BoqItem) => num(l.quantity) * num(l.unit_rate)
+const sectionAmount = (sec: Section) =>
+  sec.leaves.length
+    ? sec.leaves.reduce((t, l) => t + leafAmount(l), 0)
+    : leafAmount(sec.header)
+const sectionWeight = (sec: Section) =>
+  sec.leaves.length
+    ? sec.leaves.reduce((t, l) => t + num(l.weight), 0)
+    : num(sec.header.weight)
+
 // Move dragId to sit where targetId currently is, within an ordered id list.
 function moveBefore(ids: string[], dragId: string, targetId: string) {
   const without = ids.filter((x) => x !== dragId)
@@ -445,7 +456,9 @@ function BoqTab({ projectId }: { projectId: string }) {
       await loadItems(current!.id)
     })
 
-  const addSection = (input: { code: string; description: string }) =>
+  const addSection = (
+    input: Pick<BoqItemInput, 'code' | 'description' | 'unit' | 'quantity' | 'unit_rate'>
+  ) =>
     run(async () => {
       await createBoqItem(token!, current!.id, { ...input, parent_id: null })
       await loadItems(current!.id)
@@ -486,8 +499,7 @@ function BoqTab({ projectId }: { projectId: string }) {
 
   const sections = buildSections(items)
   const total = sections.reduce(
-    (s, sec) =>
-      s + sec.leaves.reduce((t, l) => t + num(l.quantity) * num(l.unit_rate), 0),
+    (s, sec) => s + sectionAmount(sec),
     0
   )
 
@@ -569,15 +581,9 @@ function BoqTab({ projectId }: { projectId: string }) {
             onCommit={commitCell}
             onReorder={reorder}
             onDelete={removeItem}
+            onAddItem={addItem}
+            onAddSection={addSection}
           />
-          {draft && (
-            <AddItemForm
-              sections={sections}
-              onAdd={addItem}
-              onAddSection={addSection}
-              busy={busy}
-            />
-          )}
           <p className='mt-3 text-[11px] text-muted-foreground'>
             {draft && 'Drag the ⠿ handle to reorder. '}% complete &amp; field
             progress arrive with the reporting-period API (not yet wired).
@@ -639,6 +645,8 @@ function BoqGrid({
   onCommit,
   onReorder,
   onDelete,
+  onAddItem,
+  onAddSection,
 }: {
   sections: Section[]
   total: number
@@ -647,6 +655,13 @@ function BoqGrid({
   onCommit: (id: string, field: 'quantity' | 'unit_rate', value: number) => void
   onReorder: (orderedIds: string[]) => void
   onDelete: (id: string) => void
+  onAddItem: (item: BoqItemInput) => Promise<void>
+  onAddSection: (
+    input: Pick<
+      BoqItemInput,
+      'code' | 'description' | 'unit' | 'quantity' | 'unit_rate'
+    >
+  ) => Promise<void>
 }) {
   const [editing, setEditing] = useState<{
     id: string
@@ -654,6 +669,10 @@ function BoqGrid({
   } | null>(null)
   // Drag-reorder within a group: 'S' = sections, `L:<sectionId>` = leaves.
   const [drag, setDrag] = useState<{ id: string; group: string } | null>(null)
+  // Which inline composer is open (only one at a time).
+  const [adding, setAdding] = useState<
+    { kind: 'item'; parentId: string } | { kind: 'section' } | null
+  >(null)
 
   const groupIds = (group: string): string[] => {
     if (group === 'S') return sections.map((s) => s.header.id)
@@ -682,16 +701,8 @@ function BoqGrid({
           onDrop: () => drop(group, targetId),
         }
 
-  if (!sections.length)
-    return (
-      <EmptyState
-        message={
-          draft
-            ? 'No line items yet — add a section, then items below.'
-            : 'This version has no line items.'
-        }
-      />
-    )
+  if (!sections.length && !draft)
+    return <EmptyState message='This version has no line items.' />
 
   const cell = (l: BoqItem, field: 'quantity' | 'unit_rate') => {
     const isEditing = draft && editing?.id === l.id && editing.field === field
@@ -745,39 +756,64 @@ function BoqGrid({
         </div>
 
         {sections.map((sec) => {
-          const amt = sec.leaves.reduce(
-            (t, l) => t + num(l.quantity) * num(l.unit_rate),
-            0
-          )
-          const wt = sec.leaves.reduce((t, l) => t + num(l.weight), 0)
+          const rollup = sec.leaves.length > 0 // priced by children, not itself
+          const amt = sectionAmount(sec)
+          const wt = sectionWeight(sec)
           const group = `L:${sec.header.id}`
+          const blank = (
+            <div className='flex h-full items-center justify-end px-2 text-muted-foreground'>
+              —
+            </div>
+          )
           return (
             <div key={sec.header.id}>
               <div
                 className={cn(
-                  'flex items-center justify-between bg-muted/40 px-2.5 py-2',
-                  draft && 'cursor-grab',
+                  'grid items-stretch bg-muted/40 text-xs font-semibold text-foreground',
                   drag?.id === sec.header.id && 'opacity-50'
                 )}
-                {...dragProps(sec.header.id, 'S')}
+                style={{ gridTemplateColumns: BOQ_GRID }}
                 {...dropProps('S', sec.header.id)}
               >
-                <div className='flex items-center gap-2 text-xs font-semibold text-foreground'>
+                <div
+                  className={cn(
+                    'flex items-center gap-1 p-2.5',
+                    draft && 'cursor-grab'
+                  )}
+                  {...dragProps(sec.header.id, 'S')}
+                >
                   {draft && (
                     <GripVertical className='size-3.5 text-muted-foreground' />
                   )}
-                  <span className='grid place-items-center rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground'>
+                  <span className='rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] font-normal text-muted-foreground'>
                     {sec.header.code}
                   </span>
-                  <span>{sec.header.description}</span>
                 </div>
-                <div className='flex items-center gap-3'>
-                  <span className='text-[11px] text-muted-foreground'>
-                    {sec.leaves.length} items
-                  </span>
-                  {draft && sec.leaves.length === 0 && (
+                <div className='flex items-center gap-2 p-2.5'>
+                  {sec.header.description}
+                  {rollup && (
+                    <span className='text-[11px] font-normal text-muted-foreground'>
+                      · {sec.leaves.length} items
+                    </span>
+                  )}
+                </div>
+                <div className='flex items-center justify-center p-2.5 text-[11px] font-normal text-muted-foreground'>
+                  {rollup ? '' : (sec.header.unit ?? '—')}
+                </div>
+                <div className='border-l border-border/50 font-normal'>
+                  {rollup ? blank : cell(sec.header, 'quantity')}
+                </div>
+                <div className='border-l border-border/50 font-normal'>
+                  {rollup ? blank : cell(sec.header, 'unit_rate')}
+                </div>
+                <div className='flex items-center justify-end p-2.5 font-mono'>
+                  {gbp(amt)}
+                </div>
+                <div className='flex items-center justify-end gap-1.5 p-2.5 font-mono text-[11px] font-normal text-muted-foreground'>
+                  {wt.toFixed(2)}%
+                  {draft && !rollup && (
                     <button
-                      title='Delete empty section'
+                      title='Delete section'
                       disabled={busy}
                       onClick={() => onDelete(sec.header.id)}
                       className='text-muted-foreground hover:text-destructive disabled:opacity-50'
@@ -839,23 +875,63 @@ function BoqGrid({
                 )
               })}
 
-              <div
-                className='grid bg-muted/30 text-[11px]'
-                style={{ gridTemplateColumns: BOQ_GRID }}
-              >
-                <div className='col-span-5 p-2.5 text-right text-muted-foreground italic'>
-                  Subtotal — {sec.header.description}
+              {draft &&
+                (adding?.kind === 'item' && adding.parentId === sec.header.id ? (
+                  <ItemComposerRow
+                    parentId={sec.header.id}
+                    busy={busy}
+                    onAdd={onAddItem}
+                    onClose={() => setAdding(null)}
+                  />
+                ) : (
+                  <button
+                    disabled={busy}
+                    onClick={() =>
+                      setAdding({ kind: 'item', parentId: sec.header.id })
+                    }
+                    className='flex w-full items-center gap-1.5 py-2 ps-9 text-[11px] text-muted-foreground hover:bg-muted/40 hover:text-foreground disabled:opacity-50'
+                  >
+                    <Plus className='size-3.5' /> add item to “{sec.header.code}{' '}
+                    {sec.header.description}”
+                  </button>
+                ))}
+
+              {rollup && (
+                <div
+                  className='grid bg-muted/30 text-[11px]'
+                  style={{ gridTemplateColumns: BOQ_GRID }}
+                >
+                  <div className='col-span-5 p-2.5 text-right text-muted-foreground italic'>
+                    Subtotal — {sec.header.description}
+                  </div>
+                  <div className='p-2.5 text-right font-mono font-semibold text-foreground'>
+                    {gbp(amt)}
+                  </div>
+                  <div className='p-2.5 text-right font-mono text-muted-foreground'>
+                    {wt.toFixed(2)}%
+                  </div>
                 </div>
-                <div className='p-2.5 text-right font-mono font-semibold text-foreground'>
-                  {gbp(amt)}
-                </div>
-                <div className='p-2.5 text-right font-mono text-muted-foreground'>
-                  {wt.toFixed(2)}%
-                </div>
-              </div>
+              )}
             </div>
           )
         })}
+
+        {draft &&
+          (adding?.kind === 'section' ? (
+            <SectionComposerRow
+              busy={busy}
+              onAdd={onAddSection}
+              onClose={() => setAdding(null)}
+            />
+          ) : (
+            <button
+              disabled={busy}
+              onClick={() => setAdding({ kind: 'section' })}
+              className='flex w-full items-center gap-1.5 border-t border-border px-2.5 py-2.5 text-xs font-medium text-muted-foreground hover:bg-muted/40 hover:text-foreground disabled:opacity-50'
+            >
+              <Plus className='size-3.5' /> Add section
+            </button>
+          ))}
 
         <div
           className='grid border-t border-border bg-muted/60 text-xs'
@@ -874,22 +950,218 @@ function BoqGrid({
   )
 }
 
-function Field({
-  label,
-  className,
-  children,
+// Inline row to add a line item under a section — aligned to the grid columns.
+// Stays open after each add (cleared + refocused) for fast multi-entry.
+function ItemComposerRow({
+  parentId,
+  busy,
+  onAdd,
+  onClose,
 }: {
-  label: string
-  className?: string
-  children: React.ReactNode
+  parentId: string
+  busy: boolean
+  onAdd: (item: BoqItemInput) => Promise<void>
+  onClose: () => void
 }) {
+  const empty = { code: '', description: '', unit: '', quantity: '', unit_rate: '' }
+  const [f, setF] = useState(empty)
+  const codeRef = useRef<HTMLInputElement>(null)
+  const set =
+    (k: keyof typeof empty) => (e: React.ChangeEvent<HTMLInputElement>) =>
+      setF((p) => ({ ...p, [k]: e.target.value }))
+  const valid = f.code.trim() && f.description.trim()
+
+  const submit = async () => {
+    if (!valid || busy) return
+    await onAdd({
+      parent_id: parentId,
+      code: f.code.trim(),
+      description: f.description.trim(),
+      unit: f.unit.trim() || null,
+      quantity: f.quantity ? Number(f.quantity) : null,
+      unit_rate: f.unit_rate ? Number(f.unit_rate) : null,
+    })
+    setF(empty)
+    codeRef.current?.focus()
+  }
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') void submit()
+    if (e.key === 'Escape') onClose()
+  }
+  const fieldCls =
+    'h-7 w-full rounded-sm border border-input bg-background px-1.5 text-xs outline-none focus:border-primary'
+
   return (
-    <label className={cn('flex flex-col gap-1', className)}>
-      <span className='text-[10px] tracking-wide text-muted-foreground uppercase'>
-        {label}
+    <div
+      className='grid items-center border-b border-border/60 bg-primary/5 text-xs'
+      style={{ gridTemplateColumns: BOQ_GRID }}
+    >
+      <input
+        ref={codeRef}
+        autoFocus
+        value={f.code}
+        onChange={set('code')}
+        onKeyDown={onKey}
+        placeholder='Code'
+        className={cn(fieldCls, 'ms-7 font-mono')}
+      />
+      <input
+        value={f.description}
+        onChange={set('description')}
+        onKeyDown={onKey}
+        placeholder='Description'
+        className={cn(fieldCls, 'mx-1')}
+      />
+      <div className='px-1'>
+        <UnitCombobox
+          value={f.unit}
+          onChange={(v) => setF((p) => ({ ...p, unit: v }))}
+          compact
+        />
+      </div>
+      <input
+        type='number'
+        value={f.quantity}
+        onChange={set('quantity')}
+        onKeyDown={onKey}
+        placeholder='Qty'
+        className={cn(fieldCls, 'me-1 text-right font-mono')}
+      />
+      <input
+        type='number'
+        value={f.unit_rate}
+        onChange={set('unit_rate')}
+        onKeyDown={onKey}
+        placeholder='Rate'
+        className={cn(fieldCls, 'me-1 text-right font-mono')}
+      />
+      <div className='px-2 text-right font-mono text-muted-foreground'>
+        {gbp(Number(f.quantity || 0) * Number(f.unit_rate || 0))}
+      </div>
+      <div className='flex items-center justify-end gap-1.5 px-2'>
+        <button
+          title='Add (Enter)'
+          disabled={!valid || busy}
+          onClick={() => void submit()}
+          className='text-emerald-600 hover:text-emerald-700 disabled:opacity-40'
+        >
+          <Check className='size-4' />
+        </button>
+        <button
+          title='Close (Esc)'
+          onClick={onClose}
+          className='text-muted-foreground hover:text-foreground'
+        >
+          <X className='size-4' />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Inline row to add a section (top-level item). Qty/Rate are optional: leave
+// them blank to add child items later, or fill them for a one-row section.
+function SectionComposerRow({
+  busy,
+  onAdd,
+  onClose,
+}: {
+  busy: boolean
+  onAdd: (
+    input: Pick<
+      BoqItemInput,
+      'code' | 'description' | 'unit' | 'quantity' | 'unit_rate'
+    >
+  ) => Promise<void>
+  onClose: () => void
+}) {
+  const empty = { code: '', title: '', unit: '', quantity: '', unit_rate: '' }
+  const [f, setF] = useState(empty)
+  const codeRef = useRef<HTMLInputElement>(null)
+  const set =
+    (k: keyof typeof empty) => (e: React.ChangeEvent<HTMLInputElement>) =>
+      setF((p) => ({ ...p, [k]: e.target.value }))
+  const valid = f.code.trim() && f.title.trim()
+
+  const submit = async () => {
+    if (!valid || busy) return
+    await onAdd({
+      code: f.code.trim(),
+      description: f.title.trim(),
+      unit: f.unit.trim() || null,
+      quantity: f.quantity ? Number(f.quantity) : null,
+      unit_rate: f.unit_rate ? Number(f.unit_rate) : null,
+    })
+    setF(empty)
+    codeRef.current?.focus()
+  }
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') void submit()
+    if (e.key === 'Escape') onClose()
+  }
+  const fieldCls =
+    'h-7 rounded-sm border border-input bg-background px-1.5 text-xs outline-none focus:border-primary'
+
+  return (
+    <div className='flex flex-wrap items-center gap-2 border-t border-border bg-primary/5 px-2.5 py-2'>
+      <span className='text-[11px] font-semibold tracking-wide text-muted-foreground uppercase'>
+        New section
       </span>
-      {children}
-    </label>
+      <input
+        ref={codeRef}
+        autoFocus
+        value={f.code}
+        onChange={set('code')}
+        onKeyDown={onKey}
+        placeholder='Code'
+        className={cn(fieldCls, 'w-20 font-mono')}
+      />
+      <input
+        value={f.title}
+        onChange={set('title')}
+        onKeyDown={onKey}
+        placeholder='Section title'
+        className={cn(fieldCls, 'min-w-40 flex-1')}
+      />
+      <div className='w-28'>
+        <UnitCombobox
+          value={f.unit}
+          onChange={(v) => setF((p) => ({ ...p, unit: v }))}
+          compact
+        />
+      </div>
+      <input
+        type='number'
+        value={f.quantity}
+        onChange={set('quantity')}
+        onKeyDown={onKey}
+        placeholder='Qty'
+        className={cn(fieldCls, 'w-20 text-right font-mono')}
+      />
+      <input
+        type='number'
+        value={f.unit_rate}
+        onChange={set('unit_rate')}
+        onKeyDown={onKey}
+        placeholder='Rate'
+        className={cn(fieldCls, 'w-24 text-right font-mono')}
+      />
+      <Button
+        size='sm'
+        className='h-7 rounded-md text-xs'
+        disabled={!valid || busy}
+        onClick={() => void submit()}
+      >
+        <Plus className='size-3.5' /> Add
+      </Button>
+      <button
+        title='Close (Esc)'
+        onClick={onClose}
+        className='text-muted-foreground hover:text-foreground'
+      >
+        <X className='size-4' />
+      </button>
+    </div>
   )
 }
 
@@ -898,9 +1170,11 @@ function Field({
 function UnitCombobox({
   value,
   onChange,
+  compact,
 }: {
   value: string
   onChange: (v: string) => void
+  compact?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -924,7 +1198,8 @@ function UnitCombobox({
           role='combobox'
           aria-expanded={open}
           className={cn(
-            'h-8 w-full justify-between text-xs font-normal',
+            'w-full justify-between text-xs font-normal',
+            compact ? 'h-7 px-1.5' : 'h-8',
             !value && 'text-muted-foreground'
           )}
         >
@@ -969,173 +1244,6 @@ function UnitCombobox({
         </Command>
       </PopoverContent>
     </Popover>
-  )
-}
-
-function AddItemForm({
-  sections,
-  onAdd,
-  onAddSection,
-  busy,
-}: {
-  sections: Section[]
-  onAdd: (item: BoqItemInput) => void
-  onAddSection: (input: { code: string; description: string }) => void
-  busy: boolean
-}) {
-  // Line items attach to a section (top-level item).
-  const parents = sections.map((s) => s.header)
-
-  const emptySection = { code: '', description: '' }
-  const emptyItem = {
-    parent_id: '',
-    code: '',
-    description: '',
-    unit: '',
-    quantity: '',
-    unit_rate: '',
-  }
-  const [sec, setSec] = useState(emptySection)
-  const [it, setIt] = useState(emptyItem)
-  const setS =
-    (k: keyof typeof emptySection) => (e: React.ChangeEvent<HTMLInputElement>) =>
-      setSec((p) => ({ ...p, [k]: e.target.value }))
-  const setI =
-    (k: keyof typeof emptyItem) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-      setIt((p) => ({ ...p, [k]: e.target.value }))
-
-  const submitSection = () => {
-    if (!sec.code.trim() || !sec.description.trim()) {
-      toast.error('Section code and title are required.')
-      return
-    }
-    onAddSection({ code: sec.code.trim(), description: sec.description.trim() })
-    setSec(emptySection)
-  }
-
-  const submitItem = () => {
-    if (!it.parent_id) {
-      toast.error('Choose a parent for the line item.')
-      return
-    }
-    if (!it.code.trim() || !it.description.trim()) {
-      toast.error('Code and description are required.')
-      return
-    }
-    onAdd({
-      parent_id: it.parent_id,
-      code: it.code.trim(),
-      description: it.description.trim(),
-      unit: it.unit.trim() || null,
-      quantity: it.quantity ? Number(it.quantity) : null,
-      unit_rate: it.unit_rate ? Number(it.unit_rate) : null,
-    })
-    setIt({ ...emptyItem, parent_id: it.parent_id })
-  }
-
-  const selectCls =
-    'h-8 rounded-md border border-input bg-background px-2 text-xs'
-
-  return (
-    <div className='mt-3 space-y-3'>
-      <div className='rounded-lg border border-dashed border-border bg-muted/30 p-3'>
-        <div className='mb-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase'>
-          Add section
-        </div>
-        <div className='flex flex-wrap items-end gap-2'>
-          <Field label='Code' className='w-24'>
-            <Input value={sec.code} onChange={setS('code')} className='h-8 text-xs' />
-          </Field>
-          <Field label='Section title' className='min-w-44 flex-1'>
-            <Input
-              value={sec.description}
-              onChange={setS('description')}
-              className='h-8 text-xs'
-            />
-          </Field>
-          <Button
-            size='sm'
-            variant='outline'
-            className='h-8 rounded-md text-xs'
-            disabled={busy}
-            onClick={submitSection}
-          >
-            <Plus className='size-3.5' /> Add section
-          </Button>
-        </div>
-      </div>
-
-      <div className='rounded-lg border border-dashed border-border bg-muted/30 p-3'>
-        <div className='mb-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase'>
-          Add line item
-        </div>
-        {parents.length === 0 ? (
-          <p className='text-xs text-muted-foreground'>
-            Add a section first — every line item needs a parent.
-          </p>
-        ) : (
-          <div className='flex flex-wrap items-end gap-2'>
-            <Field label='Parent' className='min-w-44'>
-              <select
-                value={it.parent_id}
-                onChange={setI('parent_id')}
-                className={selectCls}
-              >
-                <option value='' disabled>
-                  Select parent…
-                </option>
-                {parents.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.code} · {p.description}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label='Code' className='w-20'>
-              <Input value={it.code} onChange={setI('code')} className='h-8 text-xs' />
-            </Field>
-            <Field label='Description' className='min-w-40 flex-1'>
-              <Input
-                value={it.description}
-                onChange={setI('description')}
-                className='h-8 text-xs'
-              />
-            </Field>
-            <Field label='Unit' className='w-32'>
-              <UnitCombobox
-                value={it.unit}
-                onChange={(v) => setIt((p) => ({ ...p, unit: v }))}
-              />
-            </Field>
-            <Field label='Qty' className='w-24'>
-              <Input
-                type='number'
-                value={it.quantity}
-                onChange={setI('quantity')}
-                className='h-8 text-xs'
-              />
-            </Field>
-            <Field label='Rate' className='w-28'>
-              <Input
-                type='number'
-                value={it.unit_rate}
-                onChange={setI('unit_rate')}
-                className='h-8 text-xs'
-              />
-            </Field>
-            <Button
-              size='sm'
-              className='h-8 rounded-md text-xs'
-              disabled={busy}
-              onClick={submitItem}
-            >
-              <Plus className='size-3.5' /> Add
-            </Button>
-          </div>
-        )}
-      </div>
-    </div>
   )
 }
 
