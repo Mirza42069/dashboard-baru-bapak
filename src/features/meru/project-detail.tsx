@@ -431,6 +431,7 @@ function OverviewTab({
           label='Progress'
           value={progress == null ? '—' : `${progress.toFixed(1)}%`}
           tone='good'
+          plain
         />
         <MetricCard label='Contract value' value={contractValue} />
         <MetricCard
@@ -442,6 +443,7 @@ function OverviewTab({
           label='Status'
           value={project.status}
           tone={projectMetricTone(project.status)}
+          plain
         />
       </div>
       <div>
@@ -1222,7 +1224,7 @@ function ItemComposerRow({
           title='Add (Enter)'
           disabled={!valid || busy}
           onClick={() => void submit()}
-          className='text-[var(--lapis-600)] hover:text-[var(--lapis-700)] disabled:opacity-40'
+          className='text-[var(--lapis-700)] hover:opacity-70 disabled:opacity-40'
         >
           <Check className='size-4' />
         </button>

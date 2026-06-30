@@ -44,7 +44,7 @@ export function MeruTopbar() {
   }
 
   return (
-    <header className='sticky top-0 z-30 flex h-14 items-center border-b border-border bg-background/95 px-3 backdrop-blur md:px-4'>
+    <header className='sticky top-0 z-30 flex h-14 items-center border-b border-border bg-card px-3 md:px-4'>
       <Sheet>
         <SheetTrigger asChild>
           <Button
@@ -55,7 +55,10 @@ export function MeruTopbar() {
             <Menu className='size-4' />
           </Button>
         </SheetTrigger>
-        <SheetContent side='left' className='w-72 bg-background p-0'>
+        <SheetContent
+          side='left'
+          className='w-72 border-sidebar-border bg-sidebar p-0'
+        >
           <MeruBrand />
           <div className='p-3'>
             <MeruNavSection title='Workspace' items={workspaceLinks} />

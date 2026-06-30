@@ -27,14 +27,14 @@ export function SignIn2() {
             By clicking sign in, you agree to our{' '}
             <a
               href='/terms'
-              className='underline underline-offset-4 hover:text-primary'
+              className='underline underline-offset-4 hover:text-[var(--lapis-700)]'
             >
               Terms of Service
             </a>{' '}
             and{' '}
             <a
               href='/privacy'
-              className='underline underline-offset-4 hover:text-primary'
+              className='underline underline-offset-4 hover:text-[var(--lapis-700)]'
             >
               Privacy Policy
             </a>

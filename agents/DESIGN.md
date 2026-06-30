@@ -1,7 +1,7 @@
 # DESIGN.md — MERU
 
 **MERU** — *Multi-project Ecosystem for Reporting & Unification.*
-The design reference for the front end. **Light mode first.**
+The design reference for the front end. **Light mode first; dark mode is a black + blue overlay (§3, §13).**
 
 In Javanese cosmology Mount Meru is the center of the universe, and every candi is engineered as a physical replica of it — a structure you ascend in ordered tiers, laid out on a mandala plan, read as a whole from above. MERU is the consultant's summit: the central core with a 360° view of the entire project universe.
 
@@ -99,6 +99,22 @@ Each status is a hue **plus** a required shape and label (§3, colorblind safety
 | Gridlines | `--stone-200` | hairline, horizontal only |
 
 **Rules.** Body text uses `--stone-600/700/900` on `--stone-0/50` (all ≥ WCAG AA). Status color is **never** the only signal — always shape + label too. Lapis is the only interactive color; gold never enters functional UI.
+
+### Color — dark (black + blue)
+
+**Direction.** A near-black ground with a faint **blue** undertone — andesite at night, not neutral charcoal. The app background is the darkest layer; cards and panels lift one step toward blue-black so the same elevation logic reads as in light. **Lapis brightens** to become the legible blue accent (links, primary, active nav, metric values); **gold brightens** for the mark. Crucially, the **status ramp stays in place** — teal/sage/ochre/clay are lightened ~15% for the dark ground but keep their hue and meaning, so *ahead / on track / at risk / behind* read normally and never collapse into the blue. Same token names as light; only the values change under `.dark` (§13).
+
+| Role | Light | Dark |
+|---|---|---|
+| App background | `--stone-50` near-white | `#080A11` blue-black |
+| Card / elevated | `#FFFFFF` | `#11151F` |
+| Primary text | `#171A1E` | `#EFF1F8` |
+| Lapis accent (`--lapis-600`) | `#2E3C6B` | `#4E63BE` |
+| Lapis text/link (`--lapis-500/700`) | `#3B4C86` | `#8295E2` / `#6377CC` |
+| Mark gold (`--gold-500`) | `#B0873B` | `#CBA15A` |
+| Status — still vivid | teal/sage/ochre/clay | lightened ~15%, same hues |
+
+Dark mode is class-toggled (`.dark` on `<html>`); the toggle lives in the top bar.
 
 ---
 
@@ -274,9 +290,9 @@ Line icons, consistent 1.5px stroke, geometric, squared joins — engineered, no
 
 ---
 
-## 13. Tokens reference (light)
+## 13. Tokens reference
 
-Dark mode is deferred (light-first). Tokens are structured so a future `[data-theme="dark"]` block overrides values only — no component changes needed.
+Light is the base. Dark is a `.dark` overlay that overrides **only the raw scale** (`--stone-*`, `--lapis-*`, `--gold-500`, `--status-*`, `--stone-tint`); every semantic token (`--background`, `--card`, `--primary`, …) references the raw scale via `var()`, so all surfaces, text and borders cascade with no component changes.
 
 ```css
 :root {
@@ -330,11 +346,34 @@ Dark mode is deferred (light-first). Tokens are structured so a future `[data-th
 }
 ```
 
+**Dark overlay** — black + blue. Only the raw scale is restated; semantics cascade.
+
+```css
+.dark {
+  /* andesite at night — blue-black neutrals */
+  --stone-tint:#080A11; /* app background */
+  --stone-50:#0B0E16; --stone-0:#11151F; --stone-100:#1A1F2D; --stone-200:#262C3D;
+  --stone-300:#323A4F; --stone-400:#5E6680; --stone-500:#828BA3; --stone-600:#A7AFC4;
+  --stone-700:#C7CDDB; --stone-800:#DFE3EC; --stone-900:#EFF1F8;
+
+  /* lapis brightens to the blue accent; gold brightens for the mark */
+  --lapis-50:#151C32; --lapis-100:#1E2A4C; --lapis-300:#41538C;
+  --lapis-500:#8295E2; --lapis-600:#4E63BE; --lapis-700:#6377CC;
+  --gold-500:#CBA15A;
+
+  /* status stays vivid (lightened ~15%, same hues) */
+  --status-ahead-fg:#5CB0BF; --status-ahead-bg:#0E2A30; --status-ahead-bd:#1F4A53;
+  --status-ok-fg:#6FB97D;    --status-ok-bg:#122719;    --status-ok-bd:#274A30;
+  --status-risk-fg:#D8A646;  --status-risk-bg:#2A2210;  --status-risk-bd:#4D4019;
+  --status-behind-fg:#E58368;--status-behind-bg:#2C1714;--status-behind-bd:#522A22;
+  --status-none-fg:#8B93A8;  --status-none-bg:#1A1F2D;  --status-none-bd:#2A3142;
+}
+```
+
 ---
 
 ## 14. Out of scope / next
 
-- **Dark mode** — a `[data-theme="dark"]` token overlay (andesite inverts beautifully; status hues lighten ~15%).
 - **Component library** — codify §7 as real components against these tokens.
 - **The Terrace mark** — produce the actual SVG (logo, favicon, loading, empty-state lockups).
 - **Charting implementation** — the kurva-S as a reusable component matching §8.

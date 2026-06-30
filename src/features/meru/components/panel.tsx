@@ -20,9 +20,9 @@ export function Panel({
         className
       )}
     >
-      <div className='flex items-start justify-between gap-3 border-b border-[var(--lapis-100)] bg-[var(--lapis-50)] px-4 py-3'>
+      <div className='flex items-start justify-between gap-3 border-b border-border px-4 py-3'>
         <div>
-          <h2 className='font-semibold text-[var(--lapis-700)]'>{title}</h2>
+          <h2 className='font-semibold text-foreground'>{title}</h2>
           {description && (
             <p className='mt-1 text-xs text-muted-foreground'>{description}</p>
           )}

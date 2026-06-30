@@ -185,20 +185,23 @@ function ProjectSummaryTile({
   hint?: string
   tone?: 'good' | 'risk' | 'neutral'
 }) {
-  const surface =
+  const edge =
     tone === 'good'
-      ? 'border-[var(--status-ok-bd)] bg-[var(--status-ok-bg)]'
+      ? 'var(--status-ok-fg)'
       : tone === 'risk'
-        ? 'border-[var(--status-risk-bd)] bg-[var(--status-risk-bg)]'
-        : 'border-[var(--lapis-100)] bg-[var(--lapis-50)]'
+        ? 'var(--status-risk-fg)'
+        : 'var(--lapis-600)'
   const valueColor =
     tone === 'good'
       ? 'text-[var(--status-ok-fg)]'
       : tone === 'risk'
         ? 'text-[var(--status-risk-fg)]'
-        : 'text-[var(--lapis-700)]'
+        : 'text-foreground'
   return (
-    <div className={`rounded-md border p-3 ${surface}`}>
+    <div
+      style={{ borderInlineStartColor: edge }}
+      className='rounded-md border border-s-[3px] border-border bg-card p-3'
+    >
       <div className='text-[10px] font-medium tracking-[0.08em] text-muted-foreground uppercase'>
         {label}
       </div>
@@ -1154,7 +1157,7 @@ function MilestoneRow({
   status: string
 }) {
   return (
-    <div className='flex items-center gap-3 rounded-md border border-[var(--lapis-100)] bg-[var(--lapis-50)] p-3'>
+    <div className='flex items-center gap-3 rounded-md border border-border bg-card p-3'>
       <div className='grid size-11 place-items-center rounded-sm border border-[var(--lapis-100)] bg-card font-mono text-xs font-semibold tabular-nums text-[var(--lapis-700)] shadow-xs'>
         {date}
       </div>

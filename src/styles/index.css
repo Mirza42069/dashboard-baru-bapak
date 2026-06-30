@@ -2,6 +2,10 @@
 @import 'tw-animate-css';
 @import './theme.css';
 
+/* FontProvider toggles these classes on <html> at runtime, so the scanner
+   never sees them in source — force their utilities to be generated. */
+@source inline("font-{geist,inter,manrope}");
+
 @custom-variant dark (&:is(.dark *));
 
 @layer base {
@@ -88,8 +92,8 @@
 }
 
 @theme inline {
-  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  --font-sans: 'Geist', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, monospace;
   --font-serif: ui-serif, Georgia, serif;
   --radius: 0.5rem;
   --tracking-tighter: calc(var(--tracking-normal) - 0.05em);
@@ -161,9 +165,11 @@
   --stone-200: #e2e5e9; --stone-300: #cbd0d6; --stone-400: #9aa1aa;
   --stone-500: #6e757e; --stone-600: #4e545c; --stone-700: #373c43;
   --stone-800: #262a30; --stone-900: #171a1e;
-  /* MERU — lapis (interactive) + summit gold (mark only) */
-  --lapis-50: #edf0f7; --lapis-100: #d6dcec; --lapis-300: #8290c4;
-  --lapis-500: #3b4c86; --lapis-600: #2e3c6b; --lapis-700: #243154;
+  /* MERU — brand accent (warm orange) + summit gold (mark only).
+     ponytail: token still named --lapis-* to avoid a 15-file rename while the
+     palette is still being dialed in; rename to --brand-* once it's locked. */
+  --lapis-50: #fef9ec; --lapis-100: #fcecbf; --lapis-300: #f3ce6b;
+  --lapis-500: #f2b705; --lapis-600: #e3a406; --lapis-700: #a9760a;
   --gold-500: #b0873b;
   /* MERU — status (schedule signaling): fg / bg / border */
   --status-ahead-fg: #1f6473; --status-ahead-bg: #e0eef0; --status-ahead-bd: #b3d5db;
@@ -175,8 +181,9 @@
   --chart-planned: var(--stone-400); --chart-actual: var(--lapis-600);
   --chart-grid: var(--stone-200); --chart-datedate: var(--stone-300);
 
-  /* lapis-tinted ambient background so white cards read as elevated */
-  --stone-tint: #eef1f9;
+  /* clean, near-white ambient background; color is carried by the orange
+     spine + accents, not by tinting every surface (keeps contrast crisp) */
+  --stone-tint: #fafaf9;
 
   --background: var(--stone-tint);
   --foreground: var(--stone-900);
@@ -185,7 +192,7 @@
   --popover: var(--stone-0);
   --popover-foreground: var(--stone-900);
   --primary: var(--lapis-600);
-  --primary-foreground: #ffffff;
+  --primary-foreground: #2e2404;
   --secondary: var(--stone-100);
   --secondary-foreground: var(--stone-700);
   --muted: var(--stone-100);
@@ -203,17 +210,18 @@
   --chart-4: var(--status-behind-fg);
   --chart-5: var(--stone-300);
   --radius: 0.5rem;
-  --sidebar: var(--stone-0);
-  --sidebar-foreground: var(--stone-700);
-  --sidebar-primary: var(--lapis-600);
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: var(--lapis-50);
-  --sidebar-accent-foreground: var(--lapis-700);
-  --sidebar-border: var(--stone-200);
-  --sidebar-ring: var(--lapis-600);
-  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  /* the spine is a solid yellow panel — the signature surface (dark ink) */
+  --sidebar: #f2b705;
+  --sidebar-foreground: #5a4708;
+  --sidebar-primary: #3a2d05;
+  --sidebar-primary-foreground: #f2b705;
+  --sidebar-accent: #e0a800;
+  --sidebar-accent-foreground: #2e2404;
+  --sidebar-border: #dda400;
+  --sidebar-ring: #2e2404;
+  --font-sans: 'Geist', system-ui, -apple-system, sans-serif;
   --font-serif: ui-serif, Georgia, serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  --font-mono: 'Geist Mono', ui-monospace, SFMono-Regular, monospace;
   --shadow-color: oklch(0.2571 0.1161 272.24);
   --shadow-opacity: 0.15;
   --shadow-blur: 3px;
@@ -244,42 +252,38 @@
 }
 
 .dark {
-  --background: oklch(0 0 0);
-  --foreground: oklch(1 0 0);
-  --card: oklch(0.2103 0 267.51);
-  --card-foreground: oklch(0.9461 0 0);
-  --popover: oklch(0.2103 0 267.51);
-  --popover-foreground: oklch(1 0 0);
-  --primary: oklch(0.5144 0.1605 267.44);
-  --primary-foreground: oklch(0.97 0.014 254.604);
-  --secondary: oklch(0.25 0 0);
-  --secondary-foreground: oklch(0.94 0 0);
-  --muted: oklch(0.23 0 0);
-  --muted-foreground: oklch(0.72 0 0);
-  --accent: oklch(0.32 0 0);
-  --accent-foreground: oklch(0.9214 0.0248 257.65);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.97 0.014 254.604);
-  --border: oklch(0.26 0 0);
-  --input: oklch(0.32 0 0);
-  --ring: oklch(0.5144 0.1605 267.44);
-  --chart-1: oklch(0.9214 0.0248 257.65);
-  --chart-2: oklch(0.7597 0.0804 267.01);
-  --chart-3: oklch(0.6083 0.1247 272.72);
-  --chart-4: oklch(0.5144 0.1605 267.44);
-  --chart-5: oklch(0.2571 0.1161 272.24);
+  /* MERU dark — black + blue. Only the raw scale is overridden here; the
+     semantic tokens (--background/--card/--primary/…) in :root reference these
+     via var(), so every surface, text and border cascades automatically.
+     Status hues stay vivid (lightened for dark) so risk/behind/ahead read
+     normally; lapis is the blue accent throughout. */
+  --stone-tint: #100c0a;
+  --stone-50: #14100d; --stone-0: #1b1613; --stone-100: #25201c;
+  --stone-200: #322b26; --stone-300: #423a33; --stone-400: #6b6259;
+  --stone-500: #938a80; --stone-600: #b6ada3; --stone-700: #d2ccc4;
+  --stone-800: #e6e1db; --stone-900: #f6f2ee;
+
+  --lapis-50: #2a2103; --lapis-100: #3a2d06; --lapis-300: #7c5f12;
+  --lapis-500: #fcd34d; --lapis-600: #fbbf24; --lapis-700: #fde08a;
+  --gold-500: #cba15a;
+
+  /* yellow spine, deepened to amber for the dark ground (light ink) */
+  --sidebar: #4a3406;
+  --sidebar-foreground: #f5d690;
+  --sidebar-primary: #fbbf24;
+  --sidebar-primary-foreground: #2e2404;
+  --sidebar-accent: #5e4408;
+  --sidebar-accent-foreground: #fbe7b0;
+  --sidebar-border: #5e4408;
+  --sidebar-ring: #fbbf24;
+
+  --status-ahead-fg: #5cb0bf; --status-ahead-bg: #0e2a30; --status-ahead-bd: #1f4a53;
+  --status-ok-fg: #6fb97d; --status-ok-bg: #122719; --status-ok-bd: #274a30;
+  --status-risk-fg: #d8a646; --status-risk-bg: #2a2210; --status-risk-bd: #4d4019;
+  --status-behind-fg: #e58368; --status-behind-bg: #2c1714; --status-behind-bd: #522a22;
+  --status-none-fg: #8b93a8; --status-none-bg: #1a1f2d; --status-none-bd: #2a3142;
+
   --radius: 0.5rem;
-  --sidebar: oklch(0.2103 0 267.51);
-  --sidebar-foreground: oklch(1 0 0);
-  --sidebar-primary: oklch(0.5144 0.1605 267.44);
-  --sidebar-primary-foreground: oklch(0.97 0.014 254.604);
-  --sidebar-accent: oklch(0.32 0 0);
-  --sidebar-accent-foreground: oklch(0.9214 0.0248 257.65);
-  --sidebar-border: oklch(0.26 0 0);
-  --sidebar-ring: oklch(0.5144 0.1605 267.44);
-  --font-sans: Geist, sans-serif;
-  --font-serif: Noto Serif Georgian, ui-serif, serif;
-  --font-mono: Geist Mono, monospace;
   --shadow-color: oklch(0.2571 0.1161 272.24);
   --shadow-opacity: 0.15;
   --shadow-blur: 3px;

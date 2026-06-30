@@ -1,21 +1,24 @@
 import { cn } from '@/lib/utils'
 
+type Tone = 'good' | 'risk' | 'neutral'
 type MetricCardProps = {
   label: string
   value: string
   hint?: string
-  tone?: 'good' | 'risk' | 'neutral'
+  tone?: Tone
+  // plain: drop the colored accent bar (neutral edge), keep the tone-colored value.
+  plain?: boolean
 }
 
-// Filled, color-coded metric blocks (DESIGN §7.8) — neutral reads as lapis,
-// good/risk pick up the earthen status ramp.
-const toneCls: Record<NonNullable<MetricCardProps['tone']>, string> = {
-  neutral: 'border-[var(--lapis-100)] bg-[var(--lapis-50)]',
-  good: 'border-[var(--status-ok-bd)] bg-[var(--status-ok-bg)]',
-  risk: 'border-[var(--status-risk-bd)] bg-[var(--status-risk-bg)]',
+// Crisp white cards — color comes from a thin accent edge + the value, not a
+// tinted fill, so contrast stays high. Neutral reads as the brand orange.
+const accent: Record<Tone, string> = {
+  neutral: 'var(--lapis-600)',
+  good: 'var(--status-ok-fg)',
+  risk: 'var(--status-risk-fg)',
 }
-const valueCls: Record<NonNullable<MetricCardProps['tone']>, string> = {
-  neutral: 'text-[var(--lapis-700)]',
+const valueCls: Record<Tone, string> = {
+  neutral: 'text-foreground',
   good: 'text-[var(--status-ok-fg)]',
   risk: 'text-[var(--status-risk-fg)]',
 }
@@ -25,13 +28,12 @@ export function MetricCard({
   value,
   hint,
   tone = 'neutral',
+  plain = false,
 }: MetricCardProps) {
   return (
     <div
-      className={cn(
-        'group rounded-md border p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md',
-        toneCls[tone]
-      )}
+      style={{ borderInlineStartColor: plain ? 'var(--border)' : accent[tone] }}
+      className='group rounded-md border border-s-[3px] border-border bg-card p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md'
     >
       <div className='text-[10px] font-medium tracking-[0.08em] text-muted-foreground uppercase'>
         {label}
