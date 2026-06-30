@@ -67,14 +67,6 @@ export function BuildFlowTopbar() {
       </div>
 
       <div className='ms-auto flex items-center gap-2 md:gap-3'>
-        <Button
-          variant='outline'
-          className='hidden h-9 gap-2 rounded-md border-border bg-card px-3 font-normal shadow-xs lg:flex'
-        >
-          <span className='size-4 rounded bg-primary/20 ring-1 ring-primary/25' />
-          Current workspace
-          <ChevronDown className='size-3' />
-        </Button>
         <div className='relative hidden sm:block'>
           <Search className='absolute start-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground' />
           <Input
