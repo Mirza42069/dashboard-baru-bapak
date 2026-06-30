@@ -265,12 +265,12 @@ export function ProjectDetailPage() {
             {project.code}
           </div>
         </div>
-        <div className='text-right'>
+        {/* <div className='text-right'>
           <div className='text-xs text-muted-foreground'>Overall progress</div>
           <div className='font-mono text-xl font-semibold text-foreground'>
             {progress == null ? '—' : `${progress.toFixed(1)}%`}
           </div>
-        </div>
+        </div> */}
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
@@ -426,25 +426,29 @@ function OverviewTab({
 
   return (
     <div>
-      <div className='mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
+      <div className='mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3'>
+        <MetricCard label='Contract value' value={contractValue} />
+
         <MetricCard
           label='Progress'
           value={progress == null ? '—' : `${progress.toFixed(1)}%`}
           tone='good'
           plain
         />
-        <MetricCard label='Contract value' value={contractValue} />
-        <MetricCard
+
+        {/* <MetricCard
           label='Managers'
           value={String(project.managers.length)}
           tone='neutral'
-        />
+        /> */}
+
         <MetricCard
           label='Status'
           value={project.status}
           tone={projectMetricTone(project.status)}
           plain
         />
+
       </div>
       <div>
         <Panel title='Project details'>
