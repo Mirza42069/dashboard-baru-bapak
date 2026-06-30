@@ -274,7 +274,10 @@ export function ProjectsPage() {
           value={String(rows.length)}
           tone='good'
         />
-        <MetricCard label='Average progress' value='0%' />
+        <MetricCard
+          label='Average progress'
+          value={`${(rows.length ? rows.reduce((t, p) => t + p.progress, 0) / rows.length : 0).toFixed(1)}%`}
+        />
         <MetricCard label='At risk / delayed' value='0' tone='risk' />
         <MetricCard label='Budget pressure' value='Rp 0' tone='risk' />
       </div>
