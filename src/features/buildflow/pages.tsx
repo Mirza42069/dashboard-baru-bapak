@@ -91,7 +91,7 @@ export function TenantDashboard() {
       <div className='mt-4 grid gap-4 xl:grid-cols-[1.35fr_0.9fr]'>
         <Panel
           title='Spend curve'
-          description='Planned vs actual portfolio spend, £k'
+          description='Planned vs actual portfolio spend, Rp juta'
         >
           {spendSeries.length ? (
             <ChartContainer config={spendConfig} className='h-64 w-full'>
@@ -282,7 +282,7 @@ export function ProjectsPage() {
         />
         <MetricCard
           label='Budget pressure'
-          value='£0'
+          value='Rp 0'
           hint='forecast variance'
           tone='risk'
         />

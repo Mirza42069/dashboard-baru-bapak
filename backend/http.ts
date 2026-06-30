@@ -67,6 +67,13 @@ export function errorHandler(err: any, req: Request, res: Response, _next: NextF
   if (err?.code === 'P0001') {
     return res.status(409).json({ error: { code: 'CONFLICT', message: err.message, request_id } })
   }
+  // Constraint violations (not-null / check / numeric overflow) come from data we
+  // built wrong — surface the cause as 422 instead of an opaque 500.
+  if (err?.code === '23502' || err?.code === '23514' || err?.code === '22003') {
+    return res
+      .status(422)
+      .json({ error: { code: 'UNPROCESSABLE', message: err.message, request_id } })
+  }
   console.error(`[${request_id}]`, err)
   res.status(500).json({ error: { code: 'INTERNAL', message: 'Unexpected server error.', request_id } })
 }

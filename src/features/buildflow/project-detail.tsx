@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from '@tanstack/react-router'
 import {
   Check,
@@ -16,15 +16,20 @@ import {
   createBoqItem,
   createBoqVersion,
   deleteBoqItem,
+  generatePeriods,
   getProject,
   listBoqItems,
   listBoqVersions,
+  listDistribution,
+  listPeriods,
   patchBoqItem,
   recalcBoqWeights,
+  saveDistribution,
   type BoqItem,
   type BoqItemInput,
   type BoqVersion,
   type Project as ApiProject,
+  type ReportingPeriod,
 } from '@/lib/auth-api'
 import { useAuthStore } from '@/stores/auth-store'
 import { cn } from '@/lib/utils'
@@ -44,15 +49,20 @@ import {
 } from '@/components/ui/popover'
 import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { boqUnits, gbp } from './boq'
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts'
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from '@/components/ui/chart'
+import { boqUnits, idr } from './boq'
 import { EmptyState, MetricCard, Panel, StatusPill } from './components'
 import { systems } from './data'
 
 const workPackages: { name: string; pct: number }[] = []
 
 const progressKpis: { label: string; value: string; sub: string }[] = []
-
-const gantt: { name: string; start: number; span: number }[] = []
 
 const documents: {
   name: string
@@ -62,14 +72,23 @@ const documents: {
   updated: string
 }[] = []
 
-const projectTabs = [
-  { value: 'overview', label: 'Overview' },
-  { value: 'boq', label: 'Bill of Quantities' },
-  { value: 'progress', label: 'Progress & Integrations' },
-  { value: 'schedule', label: 'Schedule' },
-  { value: 'documents', label: 'Documents' },
-  { value: 'team', label: 'Team' },
+// Tabs grouped by phase, separated only by a thin divider: Overview · baseline
+// setup (BoQ → Schedule) · reporting (Progress) · records.
+const tabGroups = [
+  [{ value: 'overview', label: 'Overview' }],
+  [
+    { value: 'boq', label: 'Bill of Quantities' },
+    { value: 'schedule', label: 'Schedule' },
+  ],
+  [{ value: 'progress', label: 'Progress' }],
+  [
+    { value: 'documents', label: 'Documents' },
+    { value: 'team', label: 'Team' },
+  ],
 ]
+const projectTabs = tabGroups.flat()
+const tabTriggerCls =
+  'rounded-none border-b border-transparent px-3 py-2 text-xs text-muted-foreground transition-colors hover:text-foreground data-[state=active]:border-foreground/40 data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none'
 
 const statusTone = (s: string) =>
   s === 'On track' || s === 'active' || s === 'completed'
@@ -84,10 +103,15 @@ const formatMoney = (value: ApiProject['contract_value']) => {
   if (value == null) return 'Not set'
   const amount = typeof value === 'number' ? value : Number(value)
   if (Number.isNaN(amount)) return String(value)
-  return '£' + Math.round(amount).toLocaleString('en-GB')
+  return 'Rp ' + Math.round(amount).toLocaleString('id-ID')
 }
 
-const formatDate = (value: string | null) => value || 'Not set'
+const formatDate = (value: string | null) => {
+  if (!value) return 'Not set'
+  // Take the date part (handles 'YYYY-MM-DD' and full ISO) without TZ-shifting the day.
+  const [y, m, d] = value.slice(0, 10).split('-')
+  return d ? `${d}/${m}/${y}` : value
+}
 
 const memberInitials = (name: string) =>
   name
@@ -171,15 +195,16 @@ export function ProjectDetailPage() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className='mb-5 h-auto flex-wrap justify-start gap-1 rounded-none border-b border-border bg-transparent p-0'>
-          {projectTabs.map((t) => (
-            <TabsTrigger
-              key={t.value}
-              value={t.value}
-              className='rounded-md rounded-b-none border-b-2 border-transparent px-3 py-2 text-xs data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none'
-            >
-              {t.label}
-            </TabsTrigger>
+        <TabsList className='mb-5 h-auto flex-wrap items-center justify-start gap-1 rounded-none border-b border-border bg-transparent p-0'>
+          {tabGroups.map((group, gi) => (
+            <Fragment key={gi}>
+              {gi > 0 && <div className='mx-1.5 h-4 w-px bg-border/70' />}
+              {group.map((t) => (
+                <TabsTrigger key={t.value} value={t.value} className={tabTriggerCls}>
+                  {t.label}
+                </TabsTrigger>
+              ))}
+            </Fragment>
           ))}
         </TabsList>
 
@@ -190,10 +215,10 @@ export function ProjectDetailPage() {
           <BoqTab projectId={project.id} />
         </TabsContent>
         <TabsContent value='progress'>
-          <ProgressTab />
+          <ProgressTab projectId={project.id} />
         </TabsContent>
         <TabsContent value='schedule'>
-          <ScheduleTab />
+          <ScheduleTab projectId={project.id} />
         </TabsContent>
         <TabsContent value='documents'>
           <DocumentsTab />
@@ -359,6 +384,14 @@ function buildSections(items: BoqItem[]): Section[] {
     }))
 }
 
+// Which version a project's tabs default to. Draft wins so the BoQ and Schedule
+// tabs both land on the revision in progress; otherwise the active baseline.
+const pickVersion = (versions: BoqVersion[]) =>
+  versions.find((v) => v.status === 'draft') ??
+  versions.find((v) => v.status === 'active') ??
+  versions[0] ??
+  null
+
 // A section rolls up its children; with no children it prices itself (one row).
 const leafAmount = (l: BoqItem) => num(l.quantity) * num(l.unit_rate)
 const sectionAmount = (sec: Section) =>
@@ -406,7 +439,7 @@ function BoqTab({ projectId }: { projectId: string }) {
         const { data } = await listBoqVersions(token, projectId)
         if (cancelled) return
         setVersions(data)
-        const pick = data.find((v) => v.status === 'active') ?? data[0] ?? null
+        const pick = pickVersion(data)
         setCurrentId(pick?.id ?? null)
         setItems(pick ? (await listBoqItems(token, pick.id)).data : [])
       } catch (err) {
@@ -428,10 +461,7 @@ function BoqTab({ projectId }: { projectId: string }) {
     const { data } = await listBoqVersions(token, projectId)
     setVersions(data)
     const pick =
-      (selectId ? data.find((v) => v.id === selectId) : undefined) ??
-      data.find((v) => v.status === 'active') ??
-      data[0] ??
-      null
+      (selectId ? data.find((v) => v.id === selectId) : undefined) ?? pickVersion(data)
     setCurrentId(pick?.id ?? null)
     if (pick) await loadItems(pick.id)
     else setItems([])
@@ -770,7 +800,7 @@ function BoqGrid({
       >
         {field === 'unit_rate'
           ? num(l.unit_rate).toFixed(2)
-          : num(l.quantity).toLocaleString('en-GB')}
+          : num(l.quantity).toLocaleString('id-ID')}
       </div>
     )
   }
@@ -843,7 +873,7 @@ function BoqGrid({
                   {rollup ? blank : cell(sec.header, 'unit_rate')}
                 </div>
                 <div className='flex items-center justify-end p-2.5 font-mono'>
-                  {gbp(amt)}
+                  {idr(amt)}
                 </div>
                 <div className='flex items-center justify-end gap-1.5 p-2.5 font-mono text-[11px] font-normal text-muted-foreground'>
                   {wt.toFixed(2)}%
@@ -892,7 +922,7 @@ function BoqGrid({
                     {cell(l, 'unit_rate')}
                   </div>
                   <div className='flex items-center justify-end p-2.5 font-mono text-foreground'>
-                    {gbp(num(l.quantity) * num(l.unit_rate))}
+                    {idr(num(l.quantity) * num(l.unit_rate))}
                   </div>
                   <div className='flex items-center justify-end gap-1.5 p-2.5 font-mono text-[11px] text-muted-foreground'>
                     {num(l.weight).toFixed(2)}%
@@ -941,7 +971,7 @@ function BoqGrid({
                     Subtotal — {sec.header.description}
                   </div>
                   <div className='p-2.5 text-right font-mono font-semibold text-foreground'>
-                    {gbp(amt)}
+                    {idr(amt)}
                   </div>
                   <div className='p-2.5 text-right font-mono text-muted-foreground'>
                     {wt.toFixed(2)}%
@@ -977,7 +1007,7 @@ function BoqGrid({
             Contract total
           </div>
           <div className='p-3 text-right font-mono font-semibold text-foreground'>
-            {gbp(total)}
+            {idr(total)}
           </div>
           <div className='p-3' />
         </div>
@@ -1072,7 +1102,7 @@ function ItemComposerRow({
         className={cn(fieldCls, 'me-1 text-right font-mono')}
       />
       <div className='px-2 text-right font-mono text-muted-foreground'>
-        {gbp(Number(f.quantity || 0) * Number(f.unit_rate || 0))}
+        {idr(Number(f.quantity || 0) * Number(f.unit_rate || 0))}
       </div>
       <div className='flex items-center justify-end gap-1.5 px-2'>
         <button
@@ -1341,12 +1371,113 @@ function RevisionHistory({
   )
 }
 
-function ProgressTab() {
+const sCurveConfig = {
+  planned: { label: 'Planned', color: 'var(--primary)' },
+} satisfies ChartConfig
+
+// Read-only snapshot of the active baseline's planned curve, for the Progress tab.
+function usePlannedSchedule(projectId: string) {
+  const { auth } = useAuthStore()
+  const token = auth.accessToken
+  const [loading, setLoading] = useState(true)
+  const [version, setVersion] = useState<BoqVersion | null>(null)
+  const [periods, setPeriods] = useState<ReportingPeriod[]>([])
+  const [curve, setCurve] = useState<{ weekly: number[]; cumulative: number[] }>({
+    weekly: [],
+    cumulative: [],
+  })
+
+  useEffect(() => {
+    if (!token) return
+    let cancelled = false
+    void (async () => {
+      setLoading(true)
+      try {
+        const [{ data: versions }, { data: per }] = await Promise.all([
+          listBoqVersions(token, projectId),
+          listPeriods(token, projectId),
+        ])
+        const ver = versions.find((v) => v.status === 'active') ?? null
+        if (cancelled) return
+        setVersion(ver)
+        setPeriods(per)
+        if (ver && per.length) {
+          const [{ data: its }, { data: dist }] = await Promise.all([
+            listBoqItems(token, ver.id),
+            listDistribution(token, ver.id),
+          ])
+          if (cancelled) return
+          const cells = new Map<string, number>()
+          for (const c of dist) cells.set(`${c.boq_item_id}|${c.period_id}`, num(c.planned_pct))
+          setCurve(computePlannedCurve(scheduleRows(its), per, cells))
+        } else {
+          setCurve({ weekly: [], cumulative: [] })
+        }
+      } catch (err) {
+        if (!cancelled) toast.error(errMsg(err))
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [token, projectId])
+
+  return { loading, version, periods, curve }
+}
+
+function ProgressTab({ projectId }: { projectId: string }) {
+  const { loading, version, periods, curve } = usePlannedSchedule(projectId)
+  const data = periods.map((p, i) => ({
+    period: p.label ?? `#${p.period_index}`,
+    planned: Number((curve.cumulative[i] ?? 0).toFixed(2)),
+  }))
   return (
     <div>
       <div className='mb-4 grid gap-4 xl:grid-cols-[1.5fr_1fr]'>
         <Panel title='S-curve · planned vs actual'>
-          <EmptyState message='No progress curve available.' />
+          {loading ? (
+            <EmptyState message='Loading S-curve…' />
+          ) : !version ? (
+            <EmptyState message='Activate a BoQ baseline to see the planned S-curve.' />
+          ) : !data.length ? (
+            <EmptyState message='Generate schedule periods to see the planned S-curve.' />
+          ) : (
+            <ChartContainer config={sCurveConfig} className='h-64 w-full'>
+              <AreaChart data={data} margin={{ left: 0, right: 8, top: 8 }}>
+                <defs>
+                  <linearGradient id='planned-area' x1='0' y1='0' x2='0' y2='1'>
+                    <stop offset='5%' stopColor='var(--primary)' stopOpacity={0.22} />
+                    <stop offset='95%' stopColor='var(--primary)' stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} stroke='var(--border)' />
+                <XAxis
+                  dataKey='period'
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  minTickGap={16}
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  width={34}
+                  domain={[0, 100]}
+                  tickFormatter={(v) => `${v}%`}
+                />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Area
+                  dataKey='planned'
+                  type='monotone'
+                  stroke='var(--primary)'
+                  fill='url(#planned-area)'
+                  strokeWidth={2}
+                />
+              </AreaChart>
+            </ChartContainer>
+          )}
         </Panel>
         <div className='grid gap-4'>
           {progressKpis.length ? (
@@ -1405,39 +1536,283 @@ function ProgressTab() {
   )
 }
 
-function ScheduleTab() {
-  return (
-    <Panel title='Programme · indicative Gantt'>
-      <div className='flex pl-40 text-[10px] tracking-wide text-muted-foreground uppercase'>
-        {['Q1', 'Q2', 'Q3', 'Q4'].map((q) => (
-          <div key={q} className='flex-1'>
-            {q}
-          </div>
-        ))}
+// Leaf rows for the matrix: a section with children contributes its leaves; a
+// childless section prices itself (one row). Mirrors the engine's leaf rule.
+type ScheduleRow = { section: string; leaf: BoqItem }
+function scheduleRows(items: BoqItem[]): ScheduleRow[] {
+  const rows: ScheduleRow[] = []
+  for (const sec of buildSections(items)) {
+    if (sec.leaves.length)
+      for (const l of sec.leaves) rows.push({ section: sec.header.description, leaf: l })
+    else rows.push({ section: sec.header.description, leaf: sec.header })
+  }
+  return rows
+}
+
+const pctText = (v: number) => (v % 1 === 0 ? String(v) : v.toFixed(2))
+
+// Planned curve from the matrix: per-period planned % is Σ weight×cell, and the
+// cumulative of that is the baseline S-curve. Shared by the Schedule footer and
+// the Progress tab so both read from one definition.
+function computePlannedCurve(
+  rows: ScheduleRow[],
+  periods: ReportingPeriod[],
+  cells: Map<string, number>
+) {
+  const cell = (itemId: string, periodId: string) => cells.get(`${itemId}|${periodId}`) ?? 0
+  const weekly = periods.map((p) =>
+    rows.reduce((t, r) => t + (num(r.leaf.weight) * cell(r.leaf.id, p.id)) / 100, 0)
+  )
+  // ponytail: O(n²) prefix sum; periods are few, not worth a running accumulator.
+  const cumulative = weekly.map((_, i) => weekly.slice(0, i + 1).reduce((a, b) => a + b, 0))
+  return { weekly, cumulative }
+}
+
+// The typed schedule matrix: leaf items × reporting periods. Each cell is the
+// item's own planned % for that period (its row sums to 100). The planned
+// S-curve (bottom rows) is Σ weight×cell, derived live from what's typed.
+function ScheduleTab({ projectId }: { projectId: string }) {
+  const { auth } = useAuthStore()
+  const token = auth.accessToken
+  const [periods, setPeriods] = useState<ReportingPeriod[]>([])
+  const [version, setVersion] = useState<BoqVersion | null>(null)
+  const [items, setItems] = useState<BoqItem[]>([])
+  const [cells, setCells] = useState<Map<string, number>>(new Map())
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+
+  const key = (itemId: string, periodId: string) => `${itemId}|${periodId}`
+
+  const load = useCallback(async () => {
+    if (!token) return
+    setLoading(true)
+    try {
+      const [{ data: versions }, { data: per }] = await Promise.all([
+        listBoqVersions(token, projectId),
+        listPeriods(token, projectId),
+      ])
+      const ver = pickVersion(versions)
+      setVersion(ver)
+      setPeriods(per)
+      if (ver) {
+        const [{ data: its }, { data: dist }] = await Promise.all([
+          listBoqItems(token, ver.id),
+          listDistribution(token, ver.id),
+        ])
+        setItems(its)
+        const m = new Map<string, number>()
+        for (const c of dist) m.set(key(c.boq_item_id, c.period_id), num(c.planned_pct))
+        setCells(m)
+      } else {
+        setItems([])
+        setCells(new Map())
+      }
+    } catch (err) {
+      toast.error(errMsg(err))
+    } finally {
+      setLoading(false)
+    }
+  }, [token, projectId])
+
+  useEffect(() => {
+    void (async () => {
+      await load()
+    })()
+  }, [load])
+
+  const draft = version?.status === 'draft'
+
+  const onGenerate = async () => {
+    if (!token || busy) return
+    setBusy(true)
+    try {
+      const { data } = await generatePeriods(token, projectId)
+      setPeriods(data)
+      toast.success('Reporting periods generated.')
+    } catch (err) {
+      toast.error(errMsg(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const commitCell = async (itemId: string, periodId: string, value: number) => {
+    if (!token || !version) return
+    const k = key(itemId, periodId)
+    if (value === (cells.get(k) ?? 0)) return
+    setCells((m) => {
+      const n = new Map(m)
+      if (value > 0) n.set(k, value)
+      else n.delete(k)
+      return n
+    })
+    try {
+      await saveDistribution(token, version.id, [
+        { boq_item_id: itemId, period_id: periodId, planned_pct: value },
+      ])
+    } catch (err) {
+      toast.error(errMsg(err))
+      void load() // resync to the server on failure
+    }
+  }
+
+  if (loading) return <EmptyState message='Loading schedule…' />
+  if (!version)
+    return <EmptyState message='Create a BoQ first — the schedule is built from its items.' />
+  if (!periods.length)
+    return (
+      <div className='rounded-lg border border-border bg-card p-10 text-center'>
+        <div className='text-base font-semibold text-foreground'>No reporting periods yet</div>
+        <p className='mx-auto mt-1.5 mb-5 max-w-md text-xs text-muted-foreground'>
+          Generate the period grid from the project&apos;s schedule start, contract finish &amp;
+          reporting cadence, then phase each item across the periods.
+        </p>
+        <Button size='sm' className='rounded-md text-xs' disabled={busy} onClick={onGenerate}>
+          Generate periods
+        </Button>
       </div>
-      {gantt.length ? (
-        <div className='mt-2 space-y-2'>
-          {gantt.map((g) => (
-            <div key={g.name} className='flex items-center'>
-              <div className='w-40 flex-none text-xs text-foreground'>
-                {g.name}
-              </div>
-              <div className='relative h-5 flex-1 rounded bg-muted'>
-                <div
-                  className='absolute inset-y-0 rounded bg-primary/70'
-                  style={{
-                    left: `${(g.start / 4) * 100}%`,
-                    width: `${(g.span / 4) * 100}%`,
-                  }}
-                />
-              </div>
-            </div>
-          ))}
+    )
+
+  const rows = scheduleRows(items)
+  const cell = (itemId: string, periodId: string) => cells.get(key(itemId, periodId)) ?? 0
+  const rowSum = (leaf: BoqItem) => periods.reduce((t, p) => t + cell(leaf.id, p.id), 0)
+
+  const { weekly, cumulative } = computePlannedCurve(rows, periods, cells)
+
+  const stickyHead = 'sticky left-0 z-10 bg-muted/60 p-2 text-left'
+  const stickyCell = 'sticky left-0 z-10 bg-card p-2'
+
+  return (
+    <div className='space-y-3'>
+      <div className='flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-card p-3'>
+        <div className='flex items-center gap-3'>
+          <StatusPill tone={draft ? 'risk' : version.status === 'active' ? 'good' : 'muted'}>
+            {version.status}
+          </StatusPill>
+          <span className='text-xs text-muted-foreground'>
+            {draft
+              ? 'Type each item’s planned % per period — rows should total 100%.'
+              : 'Baseline schedule (read-only). Revise the BoQ to change it.'}
+          </span>
         </div>
-      ) : (
-        <EmptyState message='No schedule available.' />
-      )}
-    </Panel>
+        {draft && (
+          <Button
+            size='sm'
+            variant='outline'
+            className='rounded-md text-xs'
+            disabled={busy}
+            onClick={onGenerate}
+          >
+            Regenerate periods
+          </Button>
+        )}
+      </div>
+
+      <div className='overflow-x-auto rounded-lg border border-border bg-card'>
+        <table className='border-collapse text-xs'>
+          <thead>
+            <tr className='bg-muted/60 text-[10px] tracking-wide text-muted-foreground uppercase'>
+              <th className={cn(stickyHead, 'min-w-[220px]')}>Item</th>
+              {periods.map((p) => (
+                <th key={p.id} className='min-w-[52px] p-2 text-center font-mono' title={`${p.start_date} → ${p.end_date}`}>
+                  {p.label ?? p.period_index}
+                </th>
+              ))}
+              <th className='min-w-[56px] p-2 text-right'>Σ%</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, idx) => {
+              const newSection = idx === 0 || rows[idx - 1].section !== r.section
+              const sum = rowSum(r.leaf)
+              const bad = sum > 0 && Math.abs(sum - 100) > 0.5
+              return (
+                <Fragment key={r.leaf.id}>
+                  {newSection && (
+                    <tr className='bg-muted/30'>
+                      <td className={cn(stickyCell, 'bg-muted/30 font-semibold text-foreground')}>
+                        {r.section}
+                      </td>
+                      <td colSpan={periods.length + 1} />
+                    </tr>
+                  )}
+                  <tr className='border-t border-border/60'>
+                    <td className={stickyCell}>
+                      <span className='font-mono text-[11px] text-muted-foreground'>{r.leaf.code}</span>{' '}
+                      <span className='text-foreground'>{r.leaf.description}</span>
+                      <span className='ms-1 text-[10px] text-muted-foreground'>
+                        ({pctText(num(r.leaf.weight))}%)
+                      </span>
+                    </td>
+                    {periods.map((p) => (
+                      <td key={p.id} className='border-l border-border/40 p-0 text-center'>
+                        {draft ? (
+                          <input
+                            type='number'
+                            min='0'
+                            max='100'
+                            defaultValue={cell(r.leaf.id, p.id) || ''}
+                            onBlur={(e) =>
+                              void commitCell(r.leaf.id, p.id, Number(e.target.value) || 0)
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                            }}
+                            className='h-7 w-full bg-transparent px-1 text-center font-mono text-xs outline-none focus:bg-primary/10'
+                          />
+                        ) : (
+                          <span className='font-mono text-muted-foreground'>
+                            {cell(r.leaf.id, p.id) || ''}
+                          </span>
+                        )}
+                      </td>
+                    ))}
+                    <td
+                      className={cn(
+                        'p-2 text-right font-mono',
+                        bad ? 'text-amber-600' : 'text-muted-foreground'
+                      )}
+                      title={bad ? 'Row does not total 100%' : undefined}
+                    >
+                      {sum ? pctText(sum) : '—'}
+                    </td>
+                  </tr>
+                </Fragment>
+              )
+            })}
+          </tbody>
+          <tfoot>
+            <tr className='border-t border-border bg-muted/40 font-mono'>
+              <td className={cn(stickyCell, 'bg-muted/40 font-sans font-semibold text-foreground')}>
+                Planned / period
+              </td>
+              {weekly.map((w, i) => (
+                <td key={i} className='p-2 text-center text-[11px] text-muted-foreground'>
+                  {w ? w.toFixed(1) : ''}
+                </td>
+              ))}
+              <td className='p-2' />
+            </tr>
+            <tr className='bg-muted/60 font-mono'>
+              <td className={cn(stickyCell, 'bg-muted/60 font-sans font-semibold text-foreground')}>
+                Cumulative (S-curve)
+              </td>
+              {cumulative.map((c, i) => (
+                <td key={i} className='p-2 text-center text-[11px] font-semibold text-foreground'>
+                  {c.toFixed(1)}
+                </td>
+              ))}
+              <td className='p-2' />
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <p className='text-[11px] text-muted-foreground'>
+        The cumulative row is the planned baseline S-curve, derived live from the matrix. It reaches
+        ~100% when every row totals its weight.
+      </p>
+    </div>
   )
 }
 

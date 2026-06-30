@@ -428,6 +428,77 @@ export async function activateBoqVersion(
   return res.json()
 }
 
+// ---- reporting periods & planned distribution (the typed schedule matrix) --
+
+export type ReportingPeriod = {
+  id: string
+  project_id: string
+  period_index: number
+  label: string | null
+  start_date: string
+  end_date: string
+  status: 'open' | 'submitted' | 'approved' | 'locked'
+}
+
+// One matrix cell: an item's own planned % for a period (its row sums to 100).
+export type DistributionCell = {
+  boq_item_id: string
+  period_id: string
+  planned_pct: string | number
+}
+
+export async function listPeriods(
+  token: string,
+  projectId: string
+): Promise<{ data: ReportingPeriod[] }> {
+  const res = await fetch(`${BASE}/projects/${projectId}/periods`, {
+    headers: { authorization: `Bearer ${token}` },
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function generatePeriods(
+  token: string,
+  projectId: string
+): Promise<{ data: ReportingPeriod[] }> {
+  const res = await fetch(`${BASE}/projects/${projectId}/periods:generate`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}` },
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function listDistribution(
+  token: string,
+  versionId: string
+): Promise<{ data: DistributionCell[] }> {
+  const res = await fetch(`${BASE}/boq-versions/${versionId}/distribution`, {
+    headers: { authorization: `Bearer ${token}` },
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function saveDistribution(
+  token: string,
+  versionId: string,
+  cells: { boq_item_id: string; period_id: string; planned_pct: number }[]
+): Promise<{ data: DistributionCell[] }> {
+  const res = await fetch(`${BASE}/boq-versions/${versionId}/distribution:bulk`, {
+    method: 'PUT',
+    headers: tenantJsonHeaders(token),
+    credentials: 'include',
+    body: JSON.stringify({ cells }),
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
 export async function listPlatformTenants(
   token: string
 ): Promise<{ data: PlatformTenant[] }> {

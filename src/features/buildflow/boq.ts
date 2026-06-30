@@ -38,7 +38,7 @@ export type BoqTotals = {
   pct: number
 }
 
-// Value-weighted progress: a 90%-done £1m item outweighs a 100%-done £1k item.
+// Value-weighted progress: a 90%-done Rp1m item outweighs a 100%-done Rp1k item.
 export function computeTotals(leaves: BoqLeaf[]): BoqTotals {
   const sourceSections = boqSections.length
     ? boqSections
@@ -66,7 +66,8 @@ export function computeTotals(leaves: BoqLeaf[]): BoqTotals {
   return { sections, total, pct: total ? Math.round((done / total) * 100) : 0 }
 }
 
-export const gbp = (n: number) => '£' + Math.round(n).toLocaleString('en-GB')
+// Indonesian Rupiah, e.g. "Rp 1.250.000" (id-ID grouping, no subunit).
+export const idr = (n: number) => 'Rp ' + Math.round(n).toLocaleString('id-ID')
 
 // Common construction Bill-of-Quantities units for the unit picker.
 // `value` is what's stored on the item; `label` is the searchable description.
