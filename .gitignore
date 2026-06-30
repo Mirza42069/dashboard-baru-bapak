@@ -35,3 +35,4 @@ dist-ssr
 
 .claude/
 wireframe_reference.html
+backend/scripts/seed-demo-project.ts

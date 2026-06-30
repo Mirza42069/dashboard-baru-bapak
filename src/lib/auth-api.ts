@@ -87,6 +87,7 @@ export type Project = {
   schedule_start: string | null
   data_date: string | null
   created_at: string
+  progress: number // overall actual % (0–100), computed from the active baseline
   managers: Pick<TenantMember, 'id' | 'email' | 'full_name'>[]
 }
 

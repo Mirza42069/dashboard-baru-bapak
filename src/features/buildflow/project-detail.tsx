@@ -64,12 +64,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
-import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { boqUnits, idr } from './boq'
 import { EmptyState, MetricCard, Panel, StatusPill } from './components'
-
-const workPackages: { name: string; pct: number }[] = []
 
 const documents: {
   name: string
@@ -146,9 +143,51 @@ const projectMetricTone = (status: ApiProject['status']) =>
       ? 'risk'
       : ('neutral' as const)
 
+// Overall actual % = the Progress tab's latest actual-cumulative point, recomputed
+// from baseline weights × recorded progress so the header and Overview card match
+// that tab exactly (all recorded progress, regardless of period approval).
+function useOverallProgress(projectId: string) {
+  const { auth } = useAuthStore()
+  const token = auth.accessToken
+  const [pct, setPct] = useState<number | null>(null)
+  useEffect(() => {
+    if (!token) return
+    let cancelled = false
+    void (async () => {
+      try {
+        // ponytail: re-fetches the same data the Progress tab loads. One extra
+        // request set; lift useProgressSchedule to the page if it ever matters.
+        const [{ data: versions }, { data: periods }, report] = await Promise.all([
+          listBoqVersions(token, projectId),
+          listPeriods(token, projectId),
+          getProgressReport(token, projectId),
+        ])
+        const ver = versions.find((v) => v.status === 'active')
+        if (!ver || !periods.length) return
+        const { data: items } = await listBoqItems(token, ver.id)
+        const { cumulative } = computeActualCurve(
+          scheduleRows(items),
+          periods,
+          report.entries,
+          report.data_date
+        )
+        const latest = [...cumulative].reverse().find((v) => v != null) ?? 0
+        if (!cancelled) setPct(latest)
+      } catch {
+        // header just shows '—' on failure; the Progress tab surfaces the error.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [token, projectId])
+  return pct
+}
+
 export function ProjectDetailPage() {
   const { id } = useParams({ from: '/_authenticated/projects/$id' })
   const { auth } = useAuthStore()
+  const progress = useOverallProgress(id)
   const [project, setProject] = useState<ApiProject | null>(null)
   const [loading, setLoading] = useState(true)
   const [savingStatus, setSavingStatus] = useState(false)
@@ -229,7 +268,7 @@ export function ProjectDetailPage() {
         <div className='text-right'>
           <div className='text-xs text-muted-foreground'>Overall progress</div>
           <div className='font-mono text-xl font-semibold text-foreground'>
-            0%
+            {progress == null ? '—' : `${progress.toFixed(1)}%`}
           </div>
         </div>
       </div>
@@ -253,7 +292,7 @@ export function ProjectDetailPage() {
         </TabsList>
 
         <TabsContent value='overview'>
-          <OverviewTab project={project} />
+          <OverviewTab project={project} progress={progress} />
         </TabsContent>
         <TabsContent value='boq'>
           <BoqTab projectId={project.id} />
@@ -355,7 +394,13 @@ function useBoqTotal(projectId: string) {
   return total
 }
 
-function OverviewTab({ project }: { project: ApiProject }) {
+function OverviewTab({
+  project,
+  progress,
+}: {
+  project: ApiProject
+  progress: number | null
+}) {
   // Contract value = sum of the active BoQ version (null until loaded/none).
   const boqTotal = useBoqTotal(project.id)
   const contractValue = boqTotal == null ? 'Not set' : formatMoney(boqTotal)
@@ -381,7 +426,11 @@ function OverviewTab({ project }: { project: ApiProject }) {
   return (
     <div>
       <div className='mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
-        <MetricCard label='Progress' value='0%' tone='good' />
+        <MetricCard
+          label='Progress'
+          value={progress == null ? '—' : `${progress.toFixed(1)}%`}
+          tone='good'
+        />
         <MetricCard label='Contract value' value={contractValue} />
         <MetricCard
           label='Managers'
@@ -394,7 +443,7 @@ function OverviewTab({ project }: { project: ApiProject }) {
           tone={projectMetricTone(project.status)}
         />
       </div>
-      <div className='grid gap-4 xl:grid-cols-2'>
+      <div>
         <Panel title='Project details'>
           {projectMeta.length ? (
             <div className='divide-y divide-border'>
@@ -412,30 +461,7 @@ function OverviewTab({ project }: { project: ApiProject }) {
             <EmptyState message='No project details available.' />
           )}
         </Panel>
-        <Panel title='Progress by work package'>
-          <WorkPackages />
-        </Panel>
       </div>
-    </div>
-  )
-}
-
-function WorkPackages() {
-  return (
-    <div className='space-y-3'>
-      {workPackages.length ? (
-        workPackages.map((w) => (
-          <div key={w.name}>
-            <div className='mb-1.5 flex justify-between text-xs text-foreground'>
-              <span>{w.name}</span>
-              <span className='font-mono text-muted-foreground'>{w.pct}%</span>
-            </div>
-            <Progress value={w.pct} className='h-2 bg-muted' />
-          </div>
-        ))
-      ) : (
-        <EmptyState message='No work packages available.' />
-      )}
     </div>
   )
 }

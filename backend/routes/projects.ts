@@ -32,6 +32,25 @@ const COLS = [
 const projCols = COLS.join(', ')
 const projColsP = COLS.map((c) => `p.${c}`).join(', ') // qualified, for joins
 
+// Overall actual progress %, computed exactly like the Progress tab / S-curve:
+// Σ over active-baseline leaves of weight × (latest pct_complete on or before the
+// project's data_date) / 100. Counts all recorded progress regardless of period
+// approval. NULL/no-data collapses to 0. References the outer projects alias `p`.
+const PROGRESS_EXPR = `COALESCE((
+  SELECT SUM(i.weight * pe.pct_complete / 100.0)
+  FROM boq_versions bv
+  JOIN boq_items i ON i.boq_version_id = bv.id AND i.deleted_at IS NULL
+    AND NOT EXISTS (SELECT 1 FROM boq_items ch WHERE ch.parent_id = i.id AND ch.deleted_at IS NULL)
+  JOIN LATERAL (
+    SELECT pe2.pct_complete
+    FROM progress_entries pe2
+    JOIN reporting_periods rp ON rp.id = pe2.period_id
+    WHERE pe2.boq_item_id = i.id AND (p.data_date IS NULL OR rp.end_date <= p.data_date)
+    ORDER BY rp.end_date DESC LIMIT 1
+  ) pe ON true
+  WHERE bv.project_id = p.id AND bv.status = 'active'
+), 0)::float8 AS progress`
+
 // POST /projects — requires an existing client (projects.client_id is NOT NULL).
 projectsRouter.post(
   '/projects',
@@ -102,7 +121,7 @@ projectsRouter.get(
     )
     const r = await withCtx(req.ctx, (qy) =>
       qy(
-        `SELECT ${projColsP}, c.name AS client_name,
+        `SELECT ${projColsP}, c.name AS client_name, ${PROGRESS_EXPR},
                 COALESCE(json_agg(DISTINCT jsonb_build_object(
                   'id', u.id, 'full_name', u.full_name, 'email', u.email
                 )) FILTER (WHERE u.id IS NOT NULL), '[]') AS managers
@@ -134,7 +153,7 @@ projectsRouter.get(
   asyncHandler(async (req, res) => {
     const r = await withCtx(req.ctx, (q) =>
       q(
-        `SELECT ${projColsP}, p.updated_at, c.name AS client_name,
+        `SELECT ${projColsP}, p.updated_at, c.name AS client_name, ${PROGRESS_EXPR},
                 COALESCE(json_agg(DISTINCT jsonb_build_object(
                   'id', u.id, 'full_name', u.full_name, 'email', u.email
                 )) FILTER (WHERE u.id IS NOT NULL), '[]') AS managers

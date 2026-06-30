@@ -358,8 +358,10 @@ function ProjectCard({ project }: { project: ApiProject }) {
         {managers || 'No manager assigned'}
       </div>
       <div className='mt-3 flex items-center gap-3'>
-        <Progress value={0} className='h-2 flex-1 bg-muted' />
-        <span className='font-mono text-[11px] text-muted-foreground'>0%</span>
+        <Progress value={project.progress} className='h-2 flex-1 bg-muted' />
+        <span className='font-mono text-[11px] text-muted-foreground'>
+          {project.progress.toFixed(1)}%
+        </span>
       </div>
     </Link>
   )
