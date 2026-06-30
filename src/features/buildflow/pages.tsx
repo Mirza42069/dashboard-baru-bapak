@@ -4,13 +4,12 @@ import {
   ArrowUpRight,
   ChevronDown,
   CircleAlert,
-  MoreHorizontal,
   Plus,
   Search,
   SlidersHorizontal,
 } from 'lucide-react'
-import { Area, AreaChart, CartesianGrid, XAxis } from 'recharts'
 import { toast } from 'sonner'
+import { useAuthStore } from '@/stores/auth-store'
 import {
   createClient,
   createMember,
@@ -23,14 +22,7 @@ import {
   type Project as ApiProject,
   type TenantMember,
 } from '@/lib/auth-api'
-import { useAuthStore } from '@/stores/auth-store'
 import { Button } from '@/components/ui/button'
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from '@/components/ui/chart'
 import {
   Dialog,
   DialogContent,
@@ -59,83 +51,89 @@ import {
   Panel,
   StatusPill,
 } from './components'
-import {
-  activity,
-  attentionItems,
-  milestones,
-  portfolioMetrics,
-  projects,
-  spendSeries,
-  systems,
-} from './data'
-
-const spendConfig = {
-  planned: { label: 'Planned', color: 'var(--muted-foreground)' },
-  actual: { label: 'Actual', color: 'var(--primary)' },
-} satisfies ChartConfig
+import { activity, attentionItems, milestones, portfolioMetrics } from './data'
 
 export function TenantDashboard() {
+  const { auth } = useAuthStore()
+  const [rows, setRows] = useState<ApiProject[]>([])
+  const token = auth.accessToken
+
+  useEffect(() => {
+    if (!token) return
+    async function loadProjects() {
+      try {
+        const res = await listProjects(token)
+        setRows(res.data)
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : 'Failed to load projects.'
+        )
+      }
+    }
+
+    void loadProjects()
+  }, [token])
+
+  const activeProjects = rows.filter((project) => project.status === 'active')
+  const pausedProjects = rows.filter((project) => project.status === 'on_hold')
+  const setupProjects = rows.filter((project) => project.status === 'planning')
+  const incompleteProjects = rows.filter(
+    (project) =>
+      !project.managers.length ||
+      !project.contract_start ||
+      !project.contract_finish ||
+      !project.schedule_start
+  )
+  const actionProjects = [...incompleteProjects, ...pausedProjects]
+    .filter(
+      (project, index, arr) =>
+        arr.findIndex((item) => item.id === project.id) === index
+    )
+    .slice(0, 5)
+
   return (
     <>
-      <PageHeader
-        title='Portfolio command centre'
-        action={<NewProjectDialog />}
-      />
-      <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
+      <PageHeader title='Portfolio command centre' />
+      <Panel
+        title='Project command panel'
+        description='Prioritised setup and follow-up actions. Use Projects for the full register.'
+        className='mt-2 border-primary/20 bg-card/95 p-5 shadow-md'
+        action={
+          <Button variant='ghost' size='sm' asChild>
+            <Link to='/projects'>
+              Details <ArrowUpRight className='size-3' />
+            </Link>
+          </Button>
+        }
+      >
+        <div className='mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
+          <ProjectSummaryTile
+            label='Total projects'
+            value={String(rows.length)}
+          />
+          <ProjectSummaryTile
+            label='Active now'
+            value={String(activeProjects.length)}
+            tone='good'
+          />
+          <ProjectSummaryTile
+            label='Planning setup'
+            value={String(setupProjects.length)}
+            tone='risk'
+          />
+          <ProjectSummaryTile
+            label='Needs action'
+            value={String(actionProjects.length)}
+            tone='risk'
+          />
+        </div>
+      </Panel>
+      <div className='mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
         {portfolioMetrics.map((metric) => (
           <MetricCard key={metric.label} {...metric} />
         ))}
       </div>
       <div className='mt-6 grid gap-4 xl:grid-cols-[1.35fr_0.9fr]'>
-        <Panel title='Spend curve · Rp juta'>
-          {spendSeries.length ? (
-            <ChartContainer config={spendConfig} className='h-64 w-full'>
-              <AreaChart
-                data={spendSeries}
-                margin={{ left: 0, right: 8, top: 8 }}
-              >
-                <defs>
-                  <linearGradient id='actual' x1='0' y1='0' x2='0' y2='1'>
-                    <stop
-                      offset='5%'
-                      stopColor='var(--primary)'
-                      stopOpacity={0.22}
-                    />
-                    <stop
-                      offset='95%'
-                      stopColor='var(--primary)'
-                      stopOpacity={0.02}
-                    />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid vertical={false} stroke='var(--border)' />
-                <XAxis
-                  dataKey='month'
-                  tickLine={false}
-                  axisLine={false}
-                  tickMargin={8}
-                />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Area
-                  dataKey='planned'
-                  type='monotone'
-                  stroke='var(--muted-foreground)'
-                  fill='transparent'
-                  strokeDasharray='4 4'
-                />
-                <Area
-                  dataKey='actual'
-                  type='monotone'
-                  stroke='var(--primary)'
-                  fill='url(#actual)'
-                  strokeWidth={2}
-                />
-              </AreaChart>
-            </ChartContainer>
-          ) : (
-            <EmptyState message='No spend data available.' />
-          )}
-        </Panel>
         <Panel title='Needs attention'>
           {attentionItems.length ? (
             <div className='space-y-2'>
@@ -145,29 +143,6 @@ export function TenantDashboard() {
             </div>
           ) : (
             <EmptyState message='No attention items.' />
-          )}
-        </Panel>
-      </div>
-      <div className='mt-6 grid gap-4 xl:grid-cols-[1.45fr_0.95fr]'>
-        <Panel
-          title='Active projects'
-          action={
-            <Button variant='ghost' size='sm'>
-              View all <ArrowUpRight className='size-3' />
-            </Button>
-          }
-        >
-          <ProjectTable compact />
-        </Panel>
-        <Panel title='Connected systems'>
-          {systems.length ? (
-            <div className='divide-y divide-border'>
-              {systems.map((system) => (
-                <SystemRow key={system.name} {...system} />
-              ))}
-            </div>
-          ) : (
-            <EmptyState message='No connected systems.' />
           )}
         </Panel>
       </div>
@@ -199,6 +174,41 @@ export function TenantDashboard() {
   )
 }
 
+function ProjectSummaryTile({
+  label,
+  value,
+  hint,
+  tone = 'neutral',
+}: {
+  label: string
+  value: string
+  hint?: string
+  tone?: 'good' | 'risk' | 'neutral'
+}) {
+  return (
+    <div className='rounded-md border border-border bg-background/70 p-3'>
+      <div className='flex items-center justify-between gap-3 text-xs text-muted-foreground'>
+        <span>{label}</span>
+        <span
+          className={`size-2 rounded-full ${
+            tone === 'good'
+              ? 'bg-emerald-500'
+              : tone === 'risk'
+                ? 'bg-amber-500'
+                : 'bg-muted-foreground/35'
+          }`}
+        />
+      </div>
+      <div className='mt-2 text-xl font-semibold tracking-tight text-foreground'>
+        {value}
+      </div>
+      {hint && (
+        <div className='mt-1 text-[11px] text-muted-foreground'>{hint}</div>
+      )}
+    </div>
+  )
+}
+
 export function ProjectsPage() {
   const { auth } = useAuthStore()
   const [query, setQuery] = useState('')
@@ -208,10 +218,13 @@ export function ProjectsPage() {
   const deferredQuery = useDeferredValue(query)
   const token = auth.accessToken
   const filtered = rows.filter((project) => {
-    const managers = project.managers.map((m) => m.full_name || m.email).join(' ')
-    const matchesQuery = `${project.name} ${project.code ?? ''} ${project.client.name} ${managers}`
-      .toLowerCase()
-      .includes(deferredQuery.toLowerCase())
+    const managers = project.managers
+      .map((m) => m.full_name || m.email)
+      .join(' ')
+    const matchesQuery =
+      `${project.name} ${project.code ?? ''} ${project.client.name} ${managers}`
+        .toLowerCase()
+        .includes(deferredQuery.toLowerCase())
     const matchesStatus = status === 'all' || project.status === status
     return matchesQuery && matchesStatus
   })
@@ -223,7 +236,9 @@ export function ProjectsPage() {
       const res = await listProjects(token)
       setRows(res.data)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to load projects.')
+      toast.error(
+        err instanceof Error ? err.message : 'Failed to load projects.'
+      )
     } finally {
       setLoading(false)
     }
@@ -236,7 +251,9 @@ export function ProjectsPage() {
         const res = await listProjects(token)
         setRows(res.data)
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Failed to load projects.')
+        toast.error(
+          err instanceof Error ? err.message : 'Failed to load projects.'
+        )
       } finally {
         setLoading(false)
       }
@@ -319,7 +336,9 @@ export function ProjectsPage() {
 }
 
 function ProjectCard({ project }: { project: ApiProject }) {
-  const managers = project.managers.map((m) => m.full_name || m.email).join(', ')
+  const managers = project.managers
+    .map((m) => m.full_name || m.email)
+    .join(', ')
   return (
     <Link
       to='/projects/$id'
@@ -340,9 +359,7 @@ function ProjectCard({ project }: { project: ApiProject }) {
       </div>
       <div className='mt-3 flex items-center gap-3'>
         <Progress value={0} className='h-2 flex-1 bg-muted' />
-        <span className='font-mono text-[11px] text-muted-foreground'>
-          0%
-        </span>
+        <span className='font-mono text-[11px] text-muted-foreground'>0%</span>
       </div>
     </Link>
   )
@@ -368,7 +385,9 @@ const roleLabel = (role: string) => {
 }
 
 const primaryRole = (member: TenantMember) =>
-  member.assignments[0]?.role ? roleLabel(member.assignments[0].role) : 'No role'
+  member.assignments[0]?.role
+    ? roleLabel(member.assignments[0].role)
+    : 'No role'
 
 export function TeamPage() {
   const { auth } = useAuthStore()
@@ -388,7 +407,9 @@ export function TeamPage() {
       const res = await listMembers(token)
       setMembers(res.data)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to load members.')
+      toast.error(
+        err instanceof Error ? err.message : 'Failed to load members.'
+      )
     } finally {
       setLoading(false)
     }
@@ -422,7 +443,9 @@ export function TeamPage() {
         const res = await listMembers(token)
         setMembers(res.data)
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Failed to load members.')
+        toast.error(
+          err instanceof Error ? err.message : 'Failed to load members.'
+        )
       } finally {
         setLoading(false)
       }
@@ -442,7 +465,9 @@ export function TeamPage() {
       setOpen(false)
       await refreshMembers()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to create member.')
+      toast.error(
+        err instanceof Error ? err.message : 'Failed to create member.'
+      )
     } finally {
       setSaving(false)
     }
@@ -523,9 +548,7 @@ export function TeamPage() {
                     <span>{primaryRole(m)}</span>
                     <ChevronDown className='size-3 text-muted-foreground' />
                   </div>
-                  <div className='font-mono text-muted-foreground'>
-                    0
-                  </div>
+                  <div className='font-mono text-muted-foreground'>0</div>
                   <div>
                     <StatusPill tone={m.status === 'active' ? 'good' : 'muted'}>
                       {m.status}
@@ -581,7 +604,9 @@ const emptyClientForm = { name: '', code: '' }
 function hasManagerRole(member: TenantMember) {
   return (
     member.status === 'active' &&
-    member.assignments.some((assignment) => assignment.role === 'project_manager')
+    member.assignments.some(
+      (assignment) => assignment.role === 'project_manager'
+    )
   )
 }
 
@@ -650,7 +675,9 @@ function NewProjectDialog({
       setClientForm(emptyClientForm)
       toast.success('Client created and selected.')
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to create client.')
+      toast.error(
+        err instanceof Error ? err.message : 'Failed to create client.'
+      )
     } finally {
       setCreatingClient(false)
     }
@@ -683,7 +710,9 @@ function NewProjectDialog({
       setOpen(false)
       await onCreated?.()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to create project.')
+      toast.error(
+        err instanceof Error ? err.message : 'Failed to create project.'
+      )
     } finally {
       setSaving(false)
     }
@@ -702,12 +731,15 @@ function NewProjectDialog({
         <DialogHeader>
           <DialogTitle>Create project</DialogTitle>
           <DialogDescription>
-            Register contract details, schedule setup, client, and assigned project managers.
+            Register contract details, schedule setup, client, and assigned
+            project managers.
           </DialogDescription>
         </DialogHeader>
         <div className='max-h-[75vh] overflow-y-auto pr-1'>
           <div className='mb-4 rounded-md border border-border bg-muted/30 p-3'>
-            <div className='mb-2 text-sm font-medium text-foreground'>Client</div>
+            <div className='mb-2 text-sm font-medium text-foreground'>
+              Client
+            </div>
             <div className='grid gap-3 md:grid-cols-[1fr_1fr_auto]'>
               <div className='grid gap-2'>
                 <Label htmlFor='project-client'>Existing client</Label>
@@ -717,12 +749,17 @@ function NewProjectDialog({
                   disabled={loadingOptions || !clients.length}
                 >
                   <SelectTrigger id='project-client'>
-                    <SelectValue placeholder={clients.length ? 'Select client' : 'No clients yet'} />
+                    <SelectValue
+                      placeholder={
+                        clients.length ? 'Select client' : 'No clients yet'
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {clients.map((client) => (
                       <SelectItem key={client.id} value={client.id}>
-                        {client.name}{client.code ? ` (${client.code})` : ''}
+                        {client.name}
+                        {client.code ? ` (${client.code})` : ''}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -735,7 +772,9 @@ function NewProjectDialog({
                     id='new-client-name'
                     placeholder='Client name'
                     value={clientForm.name}
-                    onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })}
+                    onChange={(e) =>
+                      setClientForm({ ...clientForm, name: e.target.value })
+                    }
                   />
                 </div>
                 <div className='grid gap-2'>
@@ -745,9 +784,14 @@ function NewProjectDialog({
                       id='new-client-code'
                       placeholder='Optional'
                       value={clientForm.code}
-                      onChange={(e) => setClientForm({ ...clientForm, code: e.target.value })}
+                      onChange={(e) =>
+                        setClientForm({ ...clientForm, code: e.target.value })
+                      }
                     />
-                    <Button type='submit' disabled={!clientForm.name || creatingClient}>
+                    <Button
+                      type='submit'
+                      disabled={!clientForm.name || creatingClient}
+                    >
                       {creatingClient ? 'Adding...' : 'Add'}
                     </Button>
                   </div>
@@ -782,7 +826,9 @@ function NewProjectDialog({
               <Textarea
                 id='project-description'
                 value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, description: e.target.value })
+                }
                 placeholder='Scope summary, package notes, or delivery objective'
               />
             </div>
@@ -792,7 +838,9 @@ function NewProjectDialog({
                 <Input
                   id='project-location'
                   value={form.location}
-                  onChange={(e) => setForm({ ...form, location: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, location: e.target.value })
+                  }
                 />
               </div>
               <div className='grid gap-2'>
@@ -800,7 +848,9 @@ function NewProjectDialog({
                 <Input
                   id='contract-no'
                   value={form.contract_no}
-                  onChange={(e) => setForm({ ...form, contract_no: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, contract_no: e.target.value })
+                  }
                 />
               </div>
             </div>
@@ -811,7 +861,9 @@ function NewProjectDialog({
                   id='contract-start'
                   type='date'
                   value={form.contract_start}
-                  onChange={(e) => setForm({ ...form, contract_start: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, contract_start: e.target.value })
+                  }
                 />
               </div>
               <div className='grid gap-2'>
@@ -820,7 +872,9 @@ function NewProjectDialog({
                   id='contract-finish'
                   type='date'
                   value={form.contract_finish}
-                  onChange={(e) => setForm({ ...form, contract_finish: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, contract_finish: e.target.value })
+                  }
                 />
               </div>
             </div>
@@ -849,7 +903,9 @@ function NewProjectDialog({
                   id='schedule-start'
                   type='date'
                   value={form.schedule_start}
-                  onChange={(e) => setForm({ ...form, schedule_start: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, schedule_start: e.target.value })
+                  }
                   required
                 />
               </div>
@@ -858,7 +914,9 @@ function NewProjectDialog({
               <Label>Project managers</Label>
               <div className='grid gap-2 rounded-md border border-border p-3'>
                 {loadingOptions ? (
-                  <div className='text-xs text-muted-foreground'>Loading managers...</div>
+                  <div className='text-xs text-muted-foreground'>
+                    Loading managers...
+                  </div>
                 ) : managers.length ? (
                   managers.map((member) => {
                     const selected = form.manager_user_ids.includes(member.id)
@@ -874,8 +932,12 @@ function NewProjectDialog({
                         }`}
                       >
                         <span>
-                          <span className='font-medium'>{member.full_name || member.email}</span>
-                          <span className='block text-muted-foreground'>{member.email}</span>
+                          <span className='font-medium'>
+                            {member.full_name || member.email}
+                          </span>
+                          <span className='block text-muted-foreground'>
+                            {member.email}
+                          </span>
                         </span>
                         <span>{selected ? 'Assigned' : 'Assign'}</span>
                       </button>
@@ -883,13 +945,18 @@ function NewProjectDialog({
                   })
                 ) : (
                   <div className='text-xs text-muted-foreground'>
-                    No active Manager members available. Create a Manager account from Team first.
+                    No active Manager members available. Create a Manager
+                    account from Team first.
                   </div>
                 )}
               </div>
             </div>
             <DialogFooter>
-              <Button type='button' variant='outline' onClick={() => setOpen(false)}>
+              <Button
+                type='button'
+                variant='outline'
+                onClick={() => setOpen(false)}
+              >
                 Cancel
               </Button>
               <Button
@@ -993,81 +1060,6 @@ function CreateMemberDialog({
   )
 }
 
-function ProjectTable({
-  compact = false,
-  projects: rows = projects,
-}: {
-  compact?: boolean
-  projects?: typeof projects
-}) {
-  if (!rows.length) return <EmptyState message='No projects available.' />
-
-  return (
-    <div className='overflow-x-auto'>
-      <table className='w-full min-w-[760px] text-left text-xs'>
-        <thead className='border-b border-border text-[10px] tracking-[0.14em] text-muted-foreground uppercase'>
-          <tr>
-            <th className='py-2 font-medium'>Project</th>
-            <th className='py-2 font-medium'>Manager</th>
-            <th className='py-2 font-medium'>Progress</th>
-            {!compact && <th className='py-2 font-medium'>Budget</th>}
-            <th className='py-2 font-medium'>Due</th>
-            <th className='py-2 font-medium'>Status</th>
-            <th className='py-2 font-medium'></th>
-          </tr>
-        </thead>
-        <tbody className='divide-y divide-border'>
-          {rows.map((project) => (
-            <tr key={project.code} className='group hover:bg-muted/40'>
-              <td className='py-3'>
-                <Link
-                  to='/projects/$id'
-                  params={{ id: project.code }}
-                  className='font-medium text-foreground hover:underline'
-                >
-                  {project.name}
-                </Link>
-                <div className='font-mono text-[11px] text-muted-foreground'>
-                  {project.code} · {project.stage}
-                </div>
-              </td>
-              <td className='py-3 text-muted-foreground'>{project.owner}</td>
-              <td className='py-3'>
-                <div className='flex items-center gap-3'>
-                  <Progress
-                    value={project.progress}
-                    className='h-2 w-32 bg-muted'
-                  />
-                  <span className='w-9 text-[11px]'>{project.progress}%</span>
-                </div>
-              </td>
-              {!compact && (
-                <td className='py-3'>
-                  <div>{project.value}</div>
-                  <div className='text-[11px] text-muted-foreground'>
-                    {project.budgetUsed}% used
-                  </div>
-                </td>
-              )}
-              <td className='py-3 text-muted-foreground'>{project.due}</td>
-              <td className='py-3'>
-                <StatusPill tone={statusTone(project.status)}>
-                  {project.status}
-                </StatusPill>
-              </td>
-              <td className='py-3 text-right'>
-                <Button variant='ghost' size='icon' className='size-8'>
-                  <MoreHorizontal className='size-4' />
-                </Button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
 function AttentionCard({
   title,
   detail,
@@ -1086,44 +1078,6 @@ function AttentionCard({
       </div>
       <StatusPill tone={severity === 'High' ? 'danger' : 'risk'}>
         {severity}
-      </StatusPill>
-    </div>
-  )
-}
-function SystemRow({
-  initials,
-  name,
-  type,
-  status,
-  sync,
-}: {
-  initials: string
-  name: string
-  type: string
-  status: string
-  sync: string
-}) {
-  return (
-    <div className='flex items-center gap-3 py-3'>
-      <div className='grid size-9 place-items-center rounded-sm bg-muted text-[11px] font-medium text-muted-foreground'>
-        {initials}
-      </div>
-      <div className='min-w-0 flex-1'>
-        <div className='font-medium text-foreground'>{name}</div>
-        <div className='text-xs text-muted-foreground'>
-          {type} · {sync}
-        </div>
-      </div>
-      <StatusPill
-        tone={
-          status === 'Connected'
-            ? 'good'
-            : status === 'Syncing'
-              ? 'risk'
-              : 'muted'
-        }
-      >
-        {status}
       </StatusPill>
     </div>
   )

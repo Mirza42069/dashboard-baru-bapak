@@ -1,7 +1,7 @@
 import { useLocation, useNavigate } from '@tanstack/react-router'
-import { Bell, ChevronDown, LogOut, Menu, Search } from 'lucide-react'
-import { logout } from '@/lib/auth-api'
+import { Bell, LogOut, Menu, Search } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
+import { logout } from '@/lib/auth-api'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
@@ -25,12 +25,13 @@ export function BuildFlowTopbar() {
   const { auth } = useAuthStore()
   const user = auth.user
   const displayName = user?.full_name || user?.email || 'User'
-  const initials = displayName
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join('') || 'U'
+  const initials =
+    displayName
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join('') || 'U'
 
   const handleLogout = () => {
     if (auth.accessToken) void logout(auth.accessToken)

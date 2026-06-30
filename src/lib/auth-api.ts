@@ -11,7 +11,11 @@ async function errorMessage(res: Response) {
   }
 }
 
-export type LoginResult = { access_token: string; token_type: string; expires_in: number }
+export type LoginResult = {
+  access_token: string
+  token_type: string
+  expires_in: number
+}
 
 export type PlatformAdmin = {
   id: string
@@ -89,11 +93,19 @@ export type Project = {
 export type Me = {
   user: { id: string; email: string; full_name: string; status: string }
   tenant: { id: string; name: string; slug: string }
-  assignments: { id: string; role: string; scope_type: string; scope_id: string | null }[]
+  assignments: {
+    id: string
+    role: string
+    scope_type: string
+    scope_id: string | null
+  }[]
   permissions: { tenant: string[]; by_scope: Record<string, string[]> }
 }
 
-export async function login(email: string, password: string): Promise<LoginResult> {
+export async function login(
+  email: string,
+  password: string
+): Promise<LoginResult> {
   const res = await fetch(`${BASE}/auth/login`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -222,7 +234,9 @@ export async function createClient(
   return res.json()
 }
 
-export async function listProjects(token: string): Promise<{ data: Project[] }> {
+export async function listProjects(
+  token: string
+): Promise<{ data: Project[] }> {
   const res = await fetch(`${BASE}/projects`, {
     headers: { authorization: `Bearer ${token}` },
     credentials: 'include',
@@ -238,6 +252,21 @@ export async function getProject(
   const res = await fetch(`${BASE}/projects/${projectId}`, {
     headers: { authorization: `Bearer ${token}` },
     credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function updateProjectStatus(
+  token: string,
+  projectId: string,
+  status: Project['status']
+): Promise<{ project: Project }> {
+  const res = await fetch(`${BASE}/projects/${projectId}/status`, {
+    method: 'PATCH',
+    headers: tenantJsonHeaders(token),
+    credentials: 'include',
+    body: JSON.stringify({ status }),
   })
   if (!res.ok) throw new Error(await errorMessage(res))
   return res.json()
@@ -393,7 +422,10 @@ export async function patchBoqItem(
   return res.json()
 }
 
-export async function deleteBoqItem(token: string, itemId: string): Promise<void> {
+export async function deleteBoqItem(
+  token: string,
+  itemId: string
+): Promise<void> {
   const res = await fetch(`${BASE}/boq-items/${itemId}`, {
     method: 'DELETE',
     headers: { authorization: `Bearer ${token}` },
@@ -489,12 +521,15 @@ export async function saveDistribution(
   versionId: string,
   cells: { boq_item_id: string; period_id: string; planned_pct: number }[]
 ): Promise<{ data: DistributionCell[] }> {
-  const res = await fetch(`${BASE}/boq-versions/${versionId}/distribution:bulk`, {
-    method: 'PUT',
-    headers: tenantJsonHeaders(token),
-    credentials: 'include',
-    body: JSON.stringify({ cells }),
-  })
+  const res = await fetch(
+    `${BASE}/boq-versions/${versionId}/distribution:bulk`,
+    {
+      method: 'PUT',
+      headers: tenantJsonHeaders(token),
+      credentials: 'include',
+      body: JSON.stringify({ cells }),
+    }
+  )
   if (!res.ok) throw new Error(await errorMessage(res))
   return res.json()
 }
@@ -556,7 +591,9 @@ export async function createPlatformTenantAdmin(
   token: string,
   tenantId: string,
   body: { email: string; password: string; full_name: string }
-): Promise<{ user: { id: string; email: string; full_name: string; status: string } }> {
+): Promise<{
+  user: { id: string; email: string; full_name: string; status: string }
+}> {
   const res = await fetch(`${BASE}/platform/tenants/${tenantId}/admins`, {
     method: 'POST',
     headers: platformJsonHeaders(token),

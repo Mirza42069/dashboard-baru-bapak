@@ -8,6 +8,7 @@ export const projectsRouter = Router()
 projectsRouter.use(authenticate)
 
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD')
+const projectStatus = z.enum(['planning', 'active', 'on_hold', 'completed', 'cancelled'])
 const createBody = z.object({
   client_id: z.string().uuid(),
   name: z.string().min(1),
@@ -94,9 +95,7 @@ projectsRouter.get(
     const f = validate(
       z.object({
         client_id: z.string().uuid().optional(),
-        status: z
-          .enum(['planning', 'active', 'on_hold', 'completed', 'cancelled'])
-          .optional(),
+        status: projectStatus.optional(),
         q: z.string().optional(),
       }),
       req.query,
@@ -183,6 +182,27 @@ projectsRouter.patch(
           req.params.projectId, b.name ?? null, b.code ?? null, b.description ?? null,
           b.location ?? null, b.contract_value ?? null, b.status ?? null, req.user!.id,
         ],
+      ),
+    )
+    if (!r.rowCount) throw errors.notFound('Project not found.')
+    res.json({ project: r.rows[0] })
+  }),
+)
+
+// PATCH /projects/:projectId/status
+projectsRouter.patch(
+  '/projects/:projectId/status',
+  requirePermission('project.manage', paramScope('project', 'projectId')),
+  asyncHandler(async (req, res) => {
+    const b = validate(z.object({ status: projectStatus }), req.body)
+    const r = await withCtx(req.ctx, (q) =>
+      q(
+        `UPDATE projects SET
+           status     = $2,
+           updated_by = $3
+         WHERE id = $1 AND deleted_at IS NULL
+         RETURNING ${projCols}, updated_at`,
+        [req.params.projectId, b.status, req.user!.id],
       ),
     )
     if (!r.rowCount) throw errors.notFound('Project not found.')

@@ -10,7 +10,9 @@ import {
   Upload,
   X,
 } from 'lucide-react'
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts'
 import { toast } from 'sonner'
+import { useAuthStore } from '@/stores/auth-store'
 import {
   activateBoqVersion,
   createBoqItem,
@@ -25,15 +27,21 @@ import {
   patchBoqItem,
   recalcBoqWeights,
   saveDistribution,
+  updateProjectStatus,
   type BoqItem,
   type BoqItemInput,
   type BoqVersion,
   type Project as ApiProject,
   type ReportingPeriod,
 } from '@/lib/auth-api'
-import { useAuthStore } from '@/stores/auth-store'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from '@/components/ui/chart'
 import {
   Command,
   CommandEmpty,
@@ -43,19 +51,18 @@ import {
   CommandList,
 } from '@/components/ui/command'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { Progress } from '@/components/ui/progress'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts'
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from '@/components/ui/chart'
 import { boqUnits, idr } from './boq'
 import { EmptyState, MetricCard, Panel, StatusPill } from './components'
 import { systems } from './data'
@@ -99,6 +106,17 @@ const statusTone = (s: string) =>
         ? 'danger'
         : ('muted' as const)
 
+const projectStatuses: { value: ApiProject['status']; label: string }[] = [
+  { value: 'planning', label: 'Planning' },
+  { value: 'active', label: 'Active' },
+  { value: 'on_hold', label: 'On hold' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'cancelled', label: 'Cancelled' },
+]
+
+const statusLabel = (status: ApiProject['status']) =>
+  projectStatuses.find((item) => item.value === status)?.label ?? status
+
 const formatMoney = (value: ApiProject['contract_value']) => {
   if (value == null) return 'Not set'
   const amount = typeof value === 'number' ? value : Number(value)
@@ -133,17 +151,21 @@ export function ProjectDetailPage() {
   const { auth } = useAuthStore()
   const [project, setProject] = useState<ApiProject | null>(null)
   const [loading, setLoading] = useState(true)
+  const [savingStatus, setSavingStatus] = useState(false)
   const [tab, setTab] = useState('boq')
+  const token = auth.accessToken
 
   useEffect(() => {
-    if (!auth.accessToken) return
+    if (!token) return
     async function loadProject() {
       setLoading(true)
       try {
-        const res = await getProject(auth.accessToken, id)
+        const res = await getProject(token, id)
         setProject(res.project)
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Failed to load project.')
+        toast.error(
+          err instanceof Error ? err.message : 'Failed to load project.'
+        )
         setProject(null)
       } finally {
         setLoading(false)
@@ -151,7 +173,25 @@ export function ProjectDetailPage() {
     }
 
     void loadProject()
-  }, [auth.accessToken, id])
+  }, [token, id])
+
+  async function changeProjectStatus(status: ApiProject['status']) {
+    if (!token || !project || status === project.status) return
+    setSavingStatus(true)
+    try {
+      const res = await updateProjectStatus(token, project.id, status)
+      setProject((current) =>
+        current ? { ...current, status: res.project.status } : current
+      )
+      toast.success(`Project status set to ${statusLabel(res.project.status)}.`)
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : 'Failed to update project status.'
+      )
+    } finally {
+      setSavingStatus(false)
+    }
+  }
 
   if (loading) return <EmptyState message='Loading project...' />
   if (!project) return <EmptyState message='Project not found.' />
@@ -176,9 +216,11 @@ export function ProjectDetailPage() {
             <h1 className='text-2xl font-semibold tracking-tight text-foreground'>
               {project.name}
             </h1>
-            <StatusPill tone={statusTone(project.status)}>
-              {project.status}
-            </StatusPill>
+            <ProjectStatusDropdown
+              status={project.status}
+              saving={savingStatus}
+              onChange={changeProjectStatus}
+            />
           </div>
           <div className='mt-1 font-mono text-xs text-muted-foreground'>
             {project.code}
@@ -198,7 +240,11 @@ export function ProjectDetailPage() {
             <Fragment key={gi}>
               {gi > 0 && <div className='mx-1.5 h-4 w-px bg-border/70' />}
               {group.map((t) => (
-                <TabsTrigger key={t.value} value={t.value} className={tabTriggerCls}>
+                <TabsTrigger
+                  key={t.value}
+                  value={t.value}
+                  className={tabTriggerCls}
+                >
                   {t.label}
                 </TabsTrigger>
               ))}
@@ -226,6 +272,53 @@ export function ProjectDetailPage() {
         </TabsContent>
       </Tabs>
     </div>
+  )
+}
+
+function ProjectStatusDropdown({
+  status,
+  saving,
+  onChange,
+}: {
+  status: ApiProject['status']
+  saving: boolean
+  onChange: (status: ApiProject['status']) => void
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild disabled={saving}>
+        <button
+          type='button'
+          className='inline-flex items-center gap-1 rounded-full transition-opacity outline-none hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring/60 disabled:pointer-events-none disabled:opacity-60'
+        >
+          <StatusPill tone={statusTone(status)}>
+            {saving ? 'Saving...' : statusLabel(status)}
+            <ChevronsUpDown className='ms-1 size-3' />
+          </StatusPill>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align='start' className='w-40'>
+        {projectStatuses.map((item) => (
+          <DropdownMenuItem
+            key={item.value}
+            disabled={saving || item.value === status}
+            onSelect={() => onChange(item.value)}
+          >
+            <span
+              className={cn(
+                'size-2 rounded-full',
+                statusTone(item.value) === 'good' && 'bg-emerald-500',
+                statusTone(item.value) === 'risk' && 'bg-amber-500',
+                statusTone(item.value) === 'danger' && 'bg-rose-500',
+                statusTone(item.value) === 'muted' && 'bg-muted-foreground/35'
+              )}
+            />
+            {item.label}
+            {item.value === status && <Check className='ms-auto size-3' />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
@@ -280,7 +373,8 @@ function OverviewTab({ project }: { project: ApiProject }) {
     ['Data date', formatDate(project.data_date)],
     [
       'Project managers',
-      project.managers.map((m) => m.full_name || m.email).join(', ') || 'Not assigned',
+      project.managers.map((m) => m.full_name || m.email).join(', ') ||
+        'Not assigned',
     ],
   ]
 
@@ -448,7 +542,8 @@ function BoqTab({ projectId }: { projectId: string }) {
     const { data } = await listBoqVersions(token, projectId)
     setVersions(data)
     const pick =
-      (selectId ? data.find((v) => v.id === selectId) : undefined) ?? pickVersion(data)
+      (selectId ? data.find((v) => v.id === selectId) : undefined) ??
+      pickVersion(data)
     setCurrentId(pick?.id ?? null)
     if (pick) await loadItems(pick.id)
     else setItems([])
@@ -510,7 +605,10 @@ function BoqTab({ projectId }: { projectId: string }) {
     })
 
   const addSection = (
-    input: Pick<BoqItemInput, 'code' | 'description' | 'unit' | 'quantity' | 'unit_rate'>
+    input: Pick<
+      BoqItemInput,
+      'code' | 'description' | 'unit' | 'quantity' | 'unit_rate'
+    >
   ) =>
     run(async () => {
       await createBoqItem(token!, current!.id, { ...input, parent_id: null })
@@ -551,10 +649,7 @@ function BoqTab({ projectId }: { projectId: string }) {
   if (!current) return <BoqEmpty onCreate={createFirst} busy={busy} />
 
   const sections = buildSections(items)
-  const total = sections.reduce(
-    (s, sec) => s + sectionAmount(sec),
-    0
-  )
+  const total = sections.reduce((s, sec) => s + sectionAmount(sec), 0)
 
   return (
     <div>
@@ -568,7 +663,9 @@ function BoqTab({ projectId }: { projectId: string }) {
           <span
             className={cn(
               'rounded-md px-2 py-1 text-[11px] font-semibold',
-              draft ? 'bg-foreground text-background' : 'bg-muted text-foreground'
+              draft
+                ? 'bg-foreground text-background'
+                : 'bg-muted text-foreground'
             )}
           >
             {draft ? 'Draft ' : ''}Rev {current.version_no}
@@ -659,13 +756,7 @@ function BoqTab({ projectId }: { projectId: string }) {
   )
 }
 
-function BoqEmpty({
-  onCreate,
-  busy,
-}: {
-  onCreate: () => void
-  busy: boolean
-}) {
+function BoqEmpty({ onCreate, busy }: { onCreate: () => void; busy: boolean }) {
   return (
     <div className='rounded-lg border border-border bg-card p-10 text-center'>
       <div className='mx-auto mb-3 grid size-12 place-items-center rounded-lg border border-dashed border-border bg-muted text-muted-foreground'>
@@ -733,7 +824,8 @@ function BoqGrid({
     return sec ? sec.leaves.map((l) => l.id) : []
   }
   const drop = (group: string, targetId: string) => {
-    if (!drag || drag.group !== group || drag.id === targetId) return setDrag(null)
+    if (!drag || drag.group !== group || drag.id === targetId)
+      return setDrag(null)
     onReorder(moveBefore(groupIds(group), drag.id, targetId))
     setDrag(null)
   }
@@ -879,57 +971,58 @@ function BoqGrid({
 
               {sec.leaves.map((l) => {
                 return (
-                <div
-                  key={l.id}
-                  className={cn(
-                    'grid items-stretch border-b border-border/60 text-xs',
-                    drag?.id === l.id && 'opacity-50'
-                  )}
-                  style={{ gridTemplateColumns: BOQ_GRID }}
-                  {...dropProps(group, l.id)}
-                >
                   <div
+                    key={l.id}
                     className={cn(
-                      'flex items-center gap-1 p-2.5 font-mono text-[11px] text-muted-foreground',
-                      draft && 'cursor-grab'
+                      'grid items-stretch border-b border-border/60 text-xs',
+                      drag?.id === l.id && 'opacity-50'
                     )}
-                    {...dragProps(l.id, group)}
+                    style={{ gridTemplateColumns: BOQ_GRID }}
+                    {...dropProps(group, l.id)}
                   >
-                    {draft && <GripVertical className='size-3.5' />}
-                    {l.code}
+                    <div
+                      className={cn(
+                        'flex items-center gap-1 p-2.5 font-mono text-[11px] text-muted-foreground',
+                        draft && 'cursor-grab'
+                      )}
+                      {...dragProps(l.id, group)}
+                    >
+                      {draft && <GripVertical className='size-3.5' />}
+                      {l.code}
+                    </div>
+                    <div className='p-2.5 text-foreground'>{l.description}</div>
+                    <div className='p-2.5 text-center text-muted-foreground'>
+                      {l.unit ?? '—'}
+                    </div>
+                    <div className='border-l border-border/50'>
+                      {cell(l, 'quantity')}
+                    </div>
+                    <div className='border-l border-border/50'>
+                      {cell(l, 'unit_rate')}
+                    </div>
+                    <div className='flex items-center justify-end p-2.5 font-mono text-foreground'>
+                      {idr(num(l.quantity) * num(l.unit_rate))}
+                    </div>
+                    <div className='flex items-center justify-end gap-1.5 p-2.5 font-mono text-[11px] text-muted-foreground'>
+                      {num(l.weight).toFixed(2)}%
+                      {draft && (
+                        <button
+                          title='Delete item'
+                          disabled={busy}
+                          onClick={() => onDelete(l.id)}
+                          className='text-muted-foreground hover:text-destructive disabled:opacity-50'
+                        >
+                          <Trash2 className='size-3.5' />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div className='p-2.5 text-foreground'>{l.description}</div>
-                  <div className='p-2.5 text-center text-muted-foreground'>
-                    {l.unit ?? '—'}
-                  </div>
-                  <div className='border-l border-border/50'>
-                    {cell(l, 'quantity')}
-                  </div>
-                  <div className='border-l border-border/50'>
-                    {cell(l, 'unit_rate')}
-                  </div>
-                  <div className='flex items-center justify-end p-2.5 font-mono text-foreground'>
-                    {idr(num(l.quantity) * num(l.unit_rate))}
-                  </div>
-                  <div className='flex items-center justify-end gap-1.5 p-2.5 font-mono text-[11px] text-muted-foreground'>
-                    {num(l.weight).toFixed(2)}%
-                    {draft && (
-                      <button
-                        title='Delete item'
-                        disabled={busy}
-                        onClick={() => onDelete(l.id)}
-                        className='text-muted-foreground hover:text-destructive disabled:opacity-50'
-                      >
-                        <Trash2 className='size-3.5' />
-                      </button>
-                    )}
-                  </div>
-                </div>
                 )
               })}
 
               {draft &&
-                (adding?.kind === 'item' && adding.parentId === sec.header.id ? (
+                (adding?.kind === 'item' &&
+                adding.parentId === sec.header.id ? (
                   <ItemComposerRow
                     parentId={sec.header.id}
                     busy={busy}
@@ -1016,7 +1109,13 @@ function ItemComposerRow({
   onAdd: (item: BoqItemInput) => Promise<void>
   onClose: () => void
 }) {
-  const empty = { code: '', description: '', unit: '', quantity: '', unit_rate: '' }
+  const empty = {
+    code: '',
+    description: '',
+    unit: '',
+    quantity: '',
+    unit_rate: '',
+  }
   const [f, setF] = useState(empty)
   const codeRef = useRef<HTMLInputElement>(null)
   const set =
@@ -1272,7 +1371,10 @@ function UnitCombobox({
             <CommandEmpty>No unit found.</CommandEmpty>
             <CommandGroup>
               {showCustom && (
-                <CommandItem value={`use ${typed}`} onSelect={() => pick(typed)}>
+                <CommandItem
+                  value={`use ${typed}`}
+                  onSelect={() => pick(typed)}
+                >
                   <Plus className='size-3.5' /> Use “{typed}”
                 </CommandItem>
               )}
@@ -1369,7 +1471,10 @@ function usePlannedSchedule(projectId: string) {
   const [loading, setLoading] = useState(true)
   const [version, setVersion] = useState<BoqVersion | null>(null)
   const [periods, setPeriods] = useState<ReportingPeriod[]>([])
-  const [curve, setCurve] = useState<{ weekly: number[]; cumulative: number[] }>({
+  const [curve, setCurve] = useState<{
+    weekly: number[]
+    cumulative: number[]
+  }>({
     weekly: [],
     cumulative: [],
   })
@@ -1395,7 +1500,8 @@ function usePlannedSchedule(projectId: string) {
           ])
           if (cancelled) return
           const cells = new Map<string, number>()
-          for (const c of dist) cells.set(`${c.boq_item_id}|${c.period_id}`, num(c.planned_pct))
+          for (const c of dist)
+            cells.set(`${c.boq_item_id}|${c.period_id}`, num(c.planned_pct))
           setCurve(computePlannedCurve(scheduleRows(its), per, cells))
         } else {
           setCurve({ weekly: [], cumulative: [] })
@@ -1435,8 +1541,16 @@ function ProgressTab({ projectId }: { projectId: string }) {
               <AreaChart data={data} margin={{ left: 0, right: 8, top: 8 }}>
                 <defs>
                   <linearGradient id='planned-area' x1='0' y1='0' x2='0' y2='1'>
-                    <stop offset='5%' stopColor='var(--primary)' stopOpacity={0.22} />
-                    <stop offset='95%' stopColor='var(--primary)' stopOpacity={0.02} />
+                    <stop
+                      offset='5%'
+                      stopColor='var(--primary)'
+                      stopOpacity={0.22}
+                    />
+                    <stop
+                      offset='95%'
+                      stopColor='var(--primary)'
+                      stopOpacity={0.02}
+                    />
                   </linearGradient>
                 </defs>
                 <CartesianGrid vertical={false} stroke='var(--border)' />
@@ -1485,39 +1599,6 @@ function ProgressTab({ projectId }: { projectId: string }) {
         <Panel title='Progress by work package'>
           <WorkPackages />
         </Panel>
-        <Panel
-          title='Project integrations'
-          action={
-            <Button size='sm' className='rounded-md text-xs'>
-              <Plus className='size-3.5' /> Connect
-            </Button>
-          }
-        >
-          {systems.length ? (
-            <div className='divide-y divide-border'>
-              {systems.map((g) => (
-                <div key={g.name} className='flex items-center gap-3 py-2.5'>
-                  <div className='grid size-8 flex-none place-items-center rounded-md bg-muted text-[11px] font-semibold text-muted-foreground'>
-                    {g.initials}
-                  </div>
-                  <div className='min-w-0 flex-1'>
-                    <div className='text-xs font-medium text-foreground'>
-                      {g.name}
-                    </div>
-                    <div className='text-[11px] text-muted-foreground'>
-                      {g.type} · synced {g.sync}
-                    </div>
-                  </div>
-                  <StatusPill tone={g.status === 'Connected' ? 'good' : 'risk'}>
-                    {g.status}
-                  </StatusPill>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <EmptyState message='No project integrations available.' />
-          )}
-        </Panel>
       </div>
     </div>
   )
@@ -1530,7 +1611,8 @@ function scheduleRows(items: BoqItem[]): ScheduleRow[] {
   const rows: ScheduleRow[] = []
   for (const sec of buildSections(items)) {
     if (sec.leaves.length)
-      for (const l of sec.leaves) rows.push({ section: sec.header.description, leaf: l })
+      for (const l of sec.leaves)
+        rows.push({ section: sec.header.description, leaf: l })
     else rows.push({ section: sec.header.description, leaf: sec.header })
   }
   return rows
@@ -1546,12 +1628,18 @@ function computePlannedCurve(
   periods: ReportingPeriod[],
   cells: Map<string, number>
 ) {
-  const cell = (itemId: string, periodId: string) => cells.get(`${itemId}|${periodId}`) ?? 0
+  const cell = (itemId: string, periodId: string) =>
+    cells.get(`${itemId}|${periodId}`) ?? 0
   const weekly = periods.map((p) =>
-    rows.reduce((t, r) => t + (num(r.leaf.weight) * cell(r.leaf.id, p.id)) / 100, 0)
+    rows.reduce(
+      (t, r) => t + (num(r.leaf.weight) * cell(r.leaf.id, p.id)) / 100,
+      0
+    )
   )
   // ponytail: O(n²) prefix sum; periods are few, not worth a running accumulator.
-  const cumulative = weekly.map((_, i) => weekly.slice(0, i + 1).reduce((a, b) => a + b, 0))
+  const cumulative = weekly.map((_, i) =>
+    weekly.slice(0, i + 1).reduce((a, b) => a + b, 0)
+  )
   return { weekly, cumulative }
 }
 
@@ -1588,7 +1676,8 @@ function ScheduleTab({ projectId }: { projectId: string }) {
         ])
         setItems(its)
         const m = new Map<string, number>()
-        for (const c of dist) m.set(key(c.boq_item_id, c.period_id), num(c.planned_pct))
+        for (const c of dist)
+          m.set(key(c.boq_item_id, c.period_id), num(c.planned_pct))
         setCells(m)
       } else {
         setItems([])
@@ -1623,7 +1712,11 @@ function ScheduleTab({ projectId }: { projectId: string }) {
     }
   }
 
-  const commitCell = async (itemId: string, periodId: string, value: number) => {
+  const commitCell = async (
+    itemId: string,
+    periodId: string,
+    value: number
+  ) => {
     if (!token || !version) return
     const k = key(itemId, periodId)
     if (value === (cells.get(k) ?? 0)) return
@@ -1645,24 +1738,36 @@ function ScheduleTab({ projectId }: { projectId: string }) {
 
   if (loading) return <EmptyState message='Loading schedule…' />
   if (!version)
-    return <EmptyState message='Create a BoQ first — the schedule is built from its items.' />
+    return (
+      <EmptyState message='Create a BoQ first — the schedule is built from its items.' />
+    )
   if (!periods.length)
     return (
       <div className='rounded-lg border border-border bg-card p-10 text-center'>
-        <div className='text-base font-semibold text-foreground'>No reporting periods yet</div>
+        <div className='text-base font-semibold text-foreground'>
+          No reporting periods yet
+        </div>
         <p className='mx-auto mt-1.5 mb-5 max-w-md text-xs text-muted-foreground'>
-          Generate the period grid from the project&apos;s schedule start, contract finish &amp;
-          reporting cadence, then phase each item across the periods.
+          Generate the period grid from the project&apos;s schedule start,
+          contract finish &amp; reporting cadence, then phase each item across
+          the periods.
         </p>
-        <Button size='sm' className='rounded-md text-xs' disabled={busy} onClick={onGenerate}>
+        <Button
+          size='sm'
+          className='rounded-md text-xs'
+          disabled={busy}
+          onClick={onGenerate}
+        >
           Generate periods
         </Button>
       </div>
     )
 
   const rows = scheduleRows(items)
-  const cell = (itemId: string, periodId: string) => cells.get(key(itemId, periodId)) ?? 0
-  const rowSum = (leaf: BoqItem) => periods.reduce((t, p) => t + cell(leaf.id, p.id), 0)
+  const cell = (itemId: string, periodId: string) =>
+    cells.get(key(itemId, periodId)) ?? 0
+  const rowSum = (leaf: BoqItem) =>
+    periods.reduce((t, p) => t + cell(leaf.id, p.id), 0)
 
   const { weekly, cumulative } = computePlannedCurve(rows, periods, cells)
 
@@ -1673,7 +1778,11 @@ function ScheduleTab({ projectId }: { projectId: string }) {
     <div className='space-y-3'>
       <div className='flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-card p-3'>
         <div className='flex items-center gap-3'>
-          <StatusPill tone={draft ? 'risk' : version.status === 'active' ? 'good' : 'muted'}>
+          <StatusPill
+            tone={
+              draft ? 'risk' : version.status === 'active' ? 'good' : 'muted'
+            }
+          >
             {version.status}
           </StatusPill>
           <span className='text-xs text-muted-foreground'>
@@ -1701,7 +1810,11 @@ function ScheduleTab({ projectId }: { projectId: string }) {
             <tr className='bg-muted/60 text-[10px] tracking-wide text-muted-foreground uppercase'>
               <th className={cn(stickyHead, 'min-w-[220px]')}>Item</th>
               {periods.map((p) => (
-                <th key={p.id} className='min-w-[52px] p-2 text-center font-mono' title={`${p.start_date} → ${p.end_date}`}>
+                <th
+                  key={p.id}
+                  className='min-w-[52px] p-2 text-center font-mono'
+                  title={`${p.start_date} → ${p.end_date}`}
+                >
                   {p.label ?? p.period_index}
                 </th>
               ))}
@@ -1710,14 +1823,20 @@ function ScheduleTab({ projectId }: { projectId: string }) {
           </thead>
           <tbody>
             {rows.map((r, idx) => {
-              const newSection = idx === 0 || rows[idx - 1].section !== r.section
+              const newSection =
+                idx === 0 || rows[idx - 1].section !== r.section
               const sum = rowSum(r.leaf)
               const bad = sum > 0 && Math.abs(sum - 100) > 0.5
               return (
                 <Fragment key={r.leaf.id}>
                   {newSection && (
                     <tr className='bg-muted/30'>
-                      <td className={cn(stickyCell, 'bg-muted/30 font-semibold text-foreground')}>
+                      <td
+                        className={cn(
+                          stickyCell,
+                          'bg-muted/30 font-semibold text-foreground'
+                        )}
+                      >
                         {r.section}
                       </td>
                       <td colSpan={periods.length + 1} />
@@ -1725,14 +1844,21 @@ function ScheduleTab({ projectId }: { projectId: string }) {
                   )}
                   <tr className='border-t border-border/60'>
                     <td className={stickyCell}>
-                      <span className='font-mono text-[11px] text-muted-foreground'>{r.leaf.code}</span>{' '}
-                      <span className='text-foreground'>{r.leaf.description}</span>
+                      <span className='font-mono text-[11px] text-muted-foreground'>
+                        {r.leaf.code}
+                      </span>{' '}
+                      <span className='text-foreground'>
+                        {r.leaf.description}
+                      </span>
                       <span className='ms-1 text-[10px] text-muted-foreground'>
                         ({pctText(num(r.leaf.weight))}%)
                       </span>
                     </td>
                     {periods.map((p) => (
-                      <td key={p.id} className='border-l border-border/40 p-0 text-center'>
+                      <td
+                        key={p.id}
+                        className='border-l border-border/40 p-0 text-center'
+                      >
                         {draft ? (
                           <input
                             type='number'
@@ -1740,10 +1866,15 @@ function ScheduleTab({ projectId }: { projectId: string }) {
                             max='100'
                             defaultValue={cell(r.leaf.id, p.id) || ''}
                             onBlur={(e) =>
-                              void commitCell(r.leaf.id, p.id, Number(e.target.value) || 0)
+                              void commitCell(
+                                r.leaf.id,
+                                p.id,
+                                Number(e.target.value) || 0
+                              )
                             }
                             onKeyDown={(e) => {
-                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                              if (e.key === 'Enter')
+                                (e.target as HTMLInputElement).blur()
                             }}
                             className='h-7 w-full bg-transparent px-1 text-center font-mono text-xs outline-none focus:bg-primary/10'
                           />
@@ -1770,22 +1901,38 @@ function ScheduleTab({ projectId }: { projectId: string }) {
           </tbody>
           <tfoot>
             <tr className='border-t border-border bg-muted/40 font-mono'>
-              <td className={cn(stickyCell, 'bg-muted/40 font-sans font-semibold text-foreground')}>
+              <td
+                className={cn(
+                  stickyCell,
+                  'bg-muted/40 font-sans font-semibold text-foreground'
+                )}
+              >
                 Planned / period
               </td>
               {weekly.map((w, i) => (
-                <td key={i} className='p-2 text-center text-[11px] text-muted-foreground'>
+                <td
+                  key={i}
+                  className='p-2 text-center text-[11px] text-muted-foreground'
+                >
                   {w ? w.toFixed(1) : ''}
                 </td>
               ))}
               <td className='p-2' />
             </tr>
             <tr className='bg-muted/60 font-mono'>
-              <td className={cn(stickyCell, 'bg-muted/60 font-sans font-semibold text-foreground')}>
+              <td
+                className={cn(
+                  stickyCell,
+                  'bg-muted/60 font-sans font-semibold text-foreground'
+                )}
+              >
                 Cumulative (S-curve)
               </td>
               {cumulative.map((c, i) => (
-                <td key={i} className='p-2 text-center text-[11px] font-semibold text-foreground'>
+                <td
+                  key={i}
+                  className='p-2 text-center text-[11px] font-semibold text-foreground'
+                >
                   {c.toFixed(1)}
                 </td>
               ))}
@@ -1796,8 +1943,8 @@ function ScheduleTab({ projectId }: { projectId: string }) {
       </div>
 
       <p className='text-[11px] text-muted-foreground'>
-        The cumulative row is the planned baseline S-curve, derived live from the matrix. It reaches
-        ~100% when every row totals its weight.
+        The cumulative row is the planned baseline S-curve, derived live from
+        the matrix. It reaches ~100% when every row totals its weight.
       </p>
     </div>
   )
