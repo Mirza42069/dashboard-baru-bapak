@@ -209,6 +209,13 @@ function ProjectSummaryTile({
   )
 }
 
+// Average progress across in-flight projects; completed ones (always ~100%)
+// would inflate the figure, so they're excluded.
+const avgProgress = (rows: ApiProject[]) => {
+  const live = rows.filter((p) => p.status !== 'completed')
+  return live.length ? live.reduce((t, p) => t + p.progress, 0) / live.length : 0
+}
+
 export function ProjectsPage() {
   const { auth } = useAuthStore()
   const [query, setQuery] = useState('')
@@ -268,7 +275,7 @@ export function ProjectsPage() {
         title='Projects'
         action={<NewProjectDialog onCreated={refreshProjects} />}
       />
-      <div className='grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
+      <div className='grid gap-3 sm:grid-cols-3'>
         <MetricCard
           label='Open projects'
           value={String(rows.length)}
@@ -276,10 +283,9 @@ export function ProjectsPage() {
         />
         <MetricCard
           label='Average progress'
-          value={`${(rows.length ? rows.reduce((t, p) => t + p.progress, 0) / rows.length : 0).toFixed(1)}%`}
+          value={`${avgProgress(rows).toFixed(1)}%`}
         />
         <MetricCard label='At risk / delayed' value='0' tone='risk' />
-        <MetricCard label='Budget pressure' value='Rp 0' tone='risk' />
       </div>
       <Panel
         title='Project register'
