@@ -66,7 +66,10 @@ export function UserAuthForm({
         permissions: me.permissions,
       })
       toast.success(`Welcome back, ${me.user.full_name || me.user.email}!`)
-      navigate({ to: redirectTo || '/', replace: true })
+      // Always land on root; role-based routing there picks the right home
+      // (Admin dashboard vs Manager's project list). Avoids returning to a
+      // deep link the user may no longer have access to.
+      navigate({ to: '/', replace: true })
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Sign in failed.')
     } finally {

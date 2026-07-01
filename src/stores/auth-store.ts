@@ -39,6 +39,13 @@ interface AuthState {
   }
 }
 
+// Admin vs Manager discriminator: member.manage is granted firm-wide only to
+// the admin role, so a tenant-scope member.manage means "Admin". Managers
+// (project-scoped project_manager) have no tenant permissions.
+export function isTenantAdmin(user: AuthUser | null): boolean {
+  return user?.permissions?.tenant.includes('member.manage') ?? false
+}
+
 export const useAuthStore = create<AuthState>()((set) => {
   const cookieState = getCookie(ACCESS_TOKEN)
   const platformCookieState = getCookie(PLATFORM_ACCESS_TOKEN)

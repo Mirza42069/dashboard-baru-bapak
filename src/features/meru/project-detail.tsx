@@ -12,14 +12,18 @@ import {
 } from 'lucide-react'
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts'
 import { toast } from 'sonner'
-import { useAuthStore } from '@/stores/auth-store'
+import { isTenantAdmin, useAuthStore } from '@/stores/auth-store'
 import {
   activateBoqVersion,
+  addMemberRole,
   createBoqItem,
   createBoqVersion,
+  createMember,
   createTicket,
   deleteBoqItem,
+  deleteMemberRole,
   deleteTicket,
+  listMembers,
   generatePeriods,
   getProgressReport,
   getProject,
@@ -40,6 +44,7 @@ import {
   type ProgressEntry,
   type Project as ApiProject,
   type ReportingPeriod,
+  type TenantMember,
   type Ticket,
   type TicketStatus,
 } from '@/lib/auth-api'
@@ -2609,39 +2614,278 @@ function DocumentsTab() {
 }
 
 function TeamTab({ project }: { project: ApiProject }) {
-  return (
-    <Panel
-      title='Project team'
-      action={
-        <Button size='sm' className='rounded-md text-xs'>
-          <Plus className='size-3.5' /> Assign member
-        </Button>
-      }
-    >
+  const { auth } = useAuthStore()
+  // Only Admins manage assignments; Managers see the team read-only.
+  return isTenantAdmin(auth.user) ? (
+    <TeamManage projectId={project.id} />
+  ) : (
+    <Panel title='Project team'>
       <div className='divide-y divide-border'>
         {project.managers.length ? (
-          project.managers.map((u) => (
-            <div key={u.email} className='flex items-center gap-3 py-2.5'>
-              <span className='grid size-8 flex-none place-items-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground'>
-                {memberInitials(u.full_name || u.email)}
-              </span>
-              <div className='flex-1'>
-                <div className='text-xs font-medium text-foreground'>
-                  {u.full_name || u.email}
-                </div>
-                <div className='text-[11px] text-muted-foreground'>
-                  {u.email}
-                </div>
-              </div>
-              <div className='rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground'>
-                Project Manager
-              </div>
-            </div>
-          ))
+          project.managers.map((u) => <TeamMemberRow key={u.email} u={u} />)
         ) : (
           <EmptyState message='No project team available.' />
         )}
       </div>
     </Panel>
+  )
+}
+
+function TeamMemberRow({
+  u,
+  onRemove,
+  busy,
+}: {
+  u: { full_name: string; email: string }
+  onRemove?: () => void
+  busy?: boolean
+}) {
+  return (
+    <div className='flex items-center gap-3 py-2.5'>
+      <span className='grid size-8 flex-none place-items-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground'>
+        {memberInitials(u.full_name || u.email)}
+      </span>
+      <div className='flex-1'>
+        <div className='text-xs font-medium text-foreground'>
+          {u.full_name || u.email}
+        </div>
+        <div className='text-[11px] text-muted-foreground'>{u.email}</div>
+      </div>
+      {onRemove ? (
+        <button
+          type='button'
+          title='Remove from project'
+          disabled={busy}
+          onClick={onRemove}
+          className='text-muted-foreground hover:text-destructive disabled:opacity-50'
+        >
+          <Trash2 className='size-3.5' />
+        </button>
+      ) : (
+        <div className='rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground'>
+          Project Manager
+        </div>
+      )}
+    </div>
+  )
+}
+
+const projectManagerAssignment = (m: TenantMember, projectId: string) =>
+  m.assignments.find(
+    (a) =>
+      a.role === 'project_manager' &&
+      a.scope_type === 'project' &&
+      a.scope_id === projectId
+  )
+
+function TeamManage({ projectId }: { projectId: string }) {
+  const { auth } = useAuthStore()
+  const token = auth.accessToken
+  const [members, setMembers] = useState<TenantMember[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [adding, setAdding] = useState(false)
+
+  const load = useCallback(async () => {
+    if (!token) return
+    try {
+      const { data } = await listMembers(token)
+      setMembers(data)
+    } catch (err) {
+      toast.error(errMsg(err))
+    } finally {
+      setLoading(false)
+    }
+  }, [token])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const assigned = members.filter((m) => projectManagerAssignment(m, projectId))
+  const available = members.filter((m) => !projectManagerAssignment(m, projectId))
+
+  const run = async (fn: () => Promise<void>) => {
+    if (!token || busy) return
+    setBusy(true)
+    try {
+      await fn()
+      await load()
+    } catch (err) {
+      toast.error(errMsg(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const assignExisting = (userId: string) =>
+    run(async () => {
+      await addMemberRole(token!, userId, {
+        scope_type: 'project',
+        scope_id: projectId,
+      })
+      toast.success('Manager assigned to project.')
+    })
+
+  const createAndAssign = (form: {
+    full_name: string
+    email: string
+    password: string
+  }) =>
+    run(async () => {
+      await createMember(token!, {
+        ...form,
+        scope_type: 'project',
+        scope_id: projectId,
+      })
+      setAdding(false)
+      toast.success('Manager created and assigned.')
+    })
+
+  const revoke = (userId: string, assignmentId: string) =>
+    run(async () => {
+      await deleteMemberRole(token!, userId, assignmentId)
+      toast.success('Manager removed from project.')
+    })
+
+  if (loading) return <EmptyState message='Loading team…' />
+
+  return (
+    <Panel
+      title='Project team'
+      description='Managers assigned here can view and enter data for this project only.'
+      action={
+        <div className='flex gap-2'>
+          {available.length > 0 && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild disabled={busy}>
+                <Button
+                  size='sm'
+                  variant='outline'
+                  className='rounded-md text-xs'
+                >
+                  <Plus className='size-3.5' /> Assign existing
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align='end' className='w-56'>
+                {available.map((m) => (
+                  <DropdownMenuItem
+                    key={m.id}
+                    disabled={busy}
+                    onSelect={() => assignExisting(m.id)}
+                  >
+                    <span className='truncate'>{m.full_name || m.email}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+          {!adding && (
+            <Button
+              size='sm'
+              className='rounded-md text-xs'
+              disabled={busy}
+              onClick={() => setAdding(true)}
+            >
+              <Plus className='size-3.5' /> New manager
+            </Button>
+          )}
+        </div>
+      }
+    >
+      {adding && (
+        <NewManagerForm
+          busy={busy}
+          onCreate={createAndAssign}
+          onClose={() => setAdding(false)}
+        />
+      )}
+      <div className='divide-y divide-border'>
+        {assigned.length ? (
+          assigned.map((m) => {
+            const a = projectManagerAssignment(m, projectId)!
+            return (
+              <TeamMemberRow
+                key={m.id}
+                u={m}
+                busy={busy}
+                onRemove={() => revoke(m.id, a.id)}
+              />
+            )
+          })
+        ) : !adding ? (
+          <EmptyState message='No managers assigned. Assign an existing member or create one.' />
+        ) : null}
+      </div>
+    </Panel>
+  )
+}
+
+function NewManagerForm({
+  busy,
+  onCreate,
+  onClose,
+}: {
+  busy: boolean
+  onCreate: (form: {
+    full_name: string
+    email: string
+    password: string
+  }) => void
+  onClose: () => void
+}) {
+  const empty = { full_name: '', email: '', password: '' }
+  const [f, setF] = useState(empty)
+  const set =
+    (k: keyof typeof empty) => (e: React.ChangeEvent<HTMLInputElement>) =>
+      setF((p) => ({ ...p, [k]: e.target.value }))
+  const valid = f.full_name.trim() && f.email.trim() && f.password.length >= 8
+  const fieldCls =
+    'h-8 w-full rounded-sm border border-input bg-background px-2 text-xs outline-none focus:border-primary'
+
+  return (
+    <div className='mb-4 space-y-2.5 rounded-md border border-border bg-muted/40 p-3'>
+      <div className='grid gap-2.5 sm:grid-cols-3'>
+        <input
+          autoFocus
+          value={f.full_name}
+          onChange={set('full_name')}
+          placeholder='Full name'
+          className={fieldCls}
+        />
+        <input
+          type='email'
+          value={f.email}
+          onChange={set('email')}
+          placeholder='Email'
+          className={fieldCls}
+        />
+        <input
+          type='password'
+          value={f.password}
+          onChange={set('password')}
+          placeholder='Password (min 8)'
+          className={fieldCls}
+        />
+      </div>
+      <div className='flex justify-end gap-2'>
+        <Button
+          size='sm'
+          variant='outline'
+          className='rounded-md text-xs'
+          onClick={onClose}
+        >
+          Cancel
+        </Button>
+        <Button
+          size='sm'
+          className='rounded-md text-xs'
+          disabled={!valid || busy}
+          onClick={() => onCreate(f)}
+        >
+          <Plus className='size-3.5' /> Create &amp; assign
+        </Button>
+      </div>
+    </div>
   )
 }

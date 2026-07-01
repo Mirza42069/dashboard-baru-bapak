@@ -10,12 +10,10 @@ import {
   SlidersHorizontal,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { useAuthStore } from '@/stores/auth-store'
+import { isTenantAdmin, useAuthStore } from '@/stores/auth-store'
 import {
   createClient,
-  createMember,
   createProject,
-  getMe,
   listClients,
   listMembers,
   listOpenTickets,
@@ -54,6 +52,54 @@ import {
   Panel,
   StatusPill,
 } from './components'
+
+// Root '/': Admins get the portfolio dashboard; Managers get their assigned
+// projects (the list is already scoped to them server-side).
+export function HomePage() {
+  const { auth } = useAuthStore()
+  return isTenantAdmin(auth.user) ? <TenantDashboard /> : <ManagerHome />
+}
+
+function ManagerHome() {
+  const { auth } = useAuthStore()
+  const [rows, setRows] = useState<ApiProject[]>([])
+  const [loading, setLoading] = useState(true)
+  const token = auth.accessToken
+
+  useEffect(() => {
+    if (!token) return
+    void (async () => {
+      try {
+        const res = await listProjects(token)
+        setRows(res.data)
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : 'Failed to load projects.'
+        )
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [token])
+
+  return (
+    <>
+      <PageHeader
+        title='My projects'
+        description='Projects assigned to you. Open one to enter progress and raise tickets.'
+      />
+      <div className='grid gap-4 sm:grid-cols-2 xl:grid-cols-3'>
+        {loading ? (
+          <EmptyState message='Loading projects...' />
+        ) : rows.length ? (
+          rows.map((project) => <ProjectCard key={project.id} project={project} />)
+        ) : (
+          <EmptyState message='No projects assigned to you yet.' />
+        )}
+      </div>
+    </>
+  )
+}
 
 export function TenantDashboard() {
   const { auth } = useAuthStore()
@@ -212,6 +258,7 @@ const avgProgress = (rows: ApiProject[]) => {
 
 export function ProjectsPage() {
   const { auth } = useAuthStore()
+  const isAdmin = isTenantAdmin(auth.user)
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('all')
   const [rows, setRows] = useState<ApiProject[]>([])
@@ -267,7 +314,7 @@ export function ProjectsPage() {
     <>
       <PageHeader
         title='Projects'
-        action={<NewProjectDialog onCreated={refreshProjects} />}
+        action={isAdmin ? <NewProjectDialog onCreated={refreshProjects} /> : null}
       />
       <div className='grid gap-3 sm:grid-cols-3'>
         <MetricCard
@@ -333,14 +380,16 @@ export function ProjectsPage() {
           ) : (
             <EmptyState message='No projects available.' />
           )}
-          <NewProjectDialog
-            onCreated={refreshProjects}
-            trigger={
-              <button className='flex min-h-52 items-center justify-center rounded-md border border-dashed border-border text-sm text-muted-foreground transition hover:bg-muted/40'>
-                + New project
-              </button>
-            }
-          />
+          {isAdmin && (
+            <NewProjectDialog
+              onCreated={refreshProjects}
+              trigger={
+                <button className='flex min-h-52 items-center justify-center rounded-md border border-dashed border-border text-sm text-muted-foreground transition hover:bg-muted/40'>
+                  + New project
+                </button>
+              }
+            />
+          )}
         </div>
       </Panel>
     </>
@@ -399,7 +448,6 @@ function ProjectCard({ project }: { project: ApiProject }) {
 }
 
 const MEMBER_GRID = '1.4fr 1.6fr 1.3fr 90px 90px'
-const emptyMemberForm = { full_name: '', email: '', password: '' }
 
 const memberInitials = (name: string) =>
   name
@@ -426,48 +474,7 @@ export function TeamPage() {
   const { auth } = useAuthStore()
   const [members, setMembers] = useState<TenantMember[]>([])
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [open, setOpen] = useState(false)
-  const [form, setForm] = useState(emptyMemberForm)
   const token = auth.accessToken
-  const canManageMembers =
-    auth.user?.permissions?.tenant.includes('member.manage') ?? false
-
-  async function refreshMembers() {
-    if (!token) return
-    setLoading(true)
-    try {
-      const res = await listMembers(token)
-      setMembers(res.data)
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : 'Failed to load members.'
-      )
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    if (!token) return
-    async function hydrateUser() {
-      if (auth.user) return
-      try {
-        const me = await getMe(token)
-        auth.setUser({
-          id: me.user.id,
-          email: me.user.email,
-          full_name: me.user.full_name,
-          tenant: me.tenant,
-          permissions: me.permissions,
-        })
-      } catch {
-        // Route auth owns redirects; this page only needs permissions for UI gating.
-      }
-    }
-
-    void hydrateUser()
-  }, [auth, token])
 
   useEffect(() => {
     if (!token) return
@@ -486,25 +493,6 @@ export function TeamPage() {
 
     void loadMembers()
   }, [token])
-
-  async function submitMember(event: FormEvent) {
-    event.preventDefault()
-    if (!token) return
-    setSaving(true)
-    try {
-      await createMember(token, form)
-      toast.success('Manager account created.')
-      setForm(emptyMemberForm)
-      setOpen(false)
-      await refreshMembers()
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : 'Failed to create member.'
-      )
-    } finally {
-      setSaving(false)
-    }
-  }
 
   return (
     <>
@@ -527,22 +515,11 @@ export function TeamPage() {
       <Panel
         title='Members'
         className='mt-4'
+        description='Managers are created and granted access from a project’s Team tab, scoped to that project.'
         action={
-          <div className='flex gap-2'>
-            <Button variant='outline' size='sm' className='rounded-md text-xs'>
-              Export
-            </Button>
-            {canManageMembers && (
-              <CreateMemberDialog
-                open={open}
-                onOpenChange={setOpen}
-                form={form}
-                setForm={setForm}
-                onSubmit={submitMember}
-                saving={saving}
-              />
-            )}
-          </div>
+          <Button variant='outline' size='sm' className='rounded-md text-xs'>
+            Export
+          </Button>
         }
       >
         <div className='overflow-x-auto'>
@@ -1007,87 +984,6 @@ function NewProjectDialog({
             </DialogFooter>
           </form>
         </div>
-      </DialogContent>
-    </Dialog>
-  )
-}
-
-function CreateMemberDialog({
-  open,
-  onOpenChange,
-  form,
-  setForm,
-  onSubmit,
-  saving,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  form: typeof emptyMemberForm
-  setForm: (form: typeof emptyMemberForm) => void
-  onSubmit: (event: FormEvent) => void
-  saving: boolean
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Button className='rounded-md text-xs'>
-          <Plus className='size-3.5' /> Create member
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Create member</DialogTitle>
-          <DialogDescription>
-            Create a Manager account with an email and password.
-          </DialogDescription>
-        </DialogHeader>
-        <form className='grid gap-4' onSubmit={onSubmit}>
-          <div className='grid gap-2'>
-            <Label htmlFor='member-name'>Full name</Label>
-            <Input
-              id='member-name'
-              value={form.full_name}
-              onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-              required
-            />
-          </div>
-          <div className='grid gap-2'>
-            <Label htmlFor='member-email'>Email</Label>
-            <Input
-              id='member-email'
-              type='email'
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              required
-            />
-          </div>
-          <div className='grid gap-2'>
-            <Label htmlFor='member-password'>Password</Label>
-            <Input
-              id='member-password'
-              type='password'
-              minLength={8}
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              required
-            />
-          </div>
-          <div className='rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground'>
-            Role: Manager
-          </div>
-          <DialogFooter>
-            <Button
-              type='button'
-              variant='outline'
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
-            <Button disabled={saving}>
-              {saving ? 'Creating...' : 'Create member'}
-            </Button>
-          </DialogFooter>
-        </form>
       </DialogContent>
     </Dialog>
   )

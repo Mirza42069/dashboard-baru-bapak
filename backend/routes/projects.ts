@@ -124,9 +124,11 @@ projectsRouter.post(
 )
 
 // GET /projects  filters: ?client_id= &status= &q=
+// Visibility, not a firm-wide gate: an Admin (tenant-scope grant) sees every
+// project; a Manager (project/client-scope grant) sees only the ones assigned to
+// them. RLS still enforces tenant isolation; this narrows within the tenant.
 projectsRouter.get(
   '/projects',
-  requirePermission('project.view', tenantScope),
   asyncHandler(async (req, res) => {
     const f = validate(
       z.object({
@@ -150,9 +152,20 @@ projectsRouter.get(
             AND ($1::uuid IS NULL OR p.client_id = $1)
             AND ($2::project_status IS NULL OR p.status = $2)
             AND ($3::text IS NULL OR p.name ILIKE '%'||$3||'%' OR p.code ILIKE '%'||$3||'%')
+            AND (
+              -- Admin (tenant-scope admin role) sees every project…
+              EXISTS (SELECT 1 FROM role_assignments a
+                      JOIN roles ar ON ar.id = a.role_id
+                      WHERE a.user_id = $4 AND a.scope_type = 'tenant' AND ar.key = 'admin')
+              -- …everyone else only the projects granted to them.
+              OR EXISTS (SELECT 1 FROM role_assignments a
+                         WHERE a.user_id = $4
+                           AND ((a.scope_type = 'project' AND a.scope_id = p.id)
+                             OR (a.scope_type = 'client'  AND a.scope_id = p.client_id)))
+            )
           GROUP BY ${projColsP}, c.name
           ORDER BY p.created_at DESC`,
-        [f.client_id ?? null, f.status ?? null, f.q ?? null],
+        [f.client_id ?? null, f.status ?? null, f.q ?? null, req.user!.id],
       ),
     )
     const data = r.rows.map((row: any) => {

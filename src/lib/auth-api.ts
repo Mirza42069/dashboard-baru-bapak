@@ -195,23 +195,65 @@ export async function listMembers(
   return res.json()
 }
 
+// Creates a project_manager. Scope defaults to tenant-wide; pass a project
+// scope to grant access to a single project (the Manager model).
 export async function createMember(
   token: string,
-  body: { email: string; password: string; full_name: string }
+  body: {
+    email: string
+    password: string
+    full_name: string
+    scope_type?: 'tenant' | 'client' | 'project'
+    scope_id?: string | null
+  }
 ): Promise<{ user: TenantMember & { role: 'project_manager' } }> {
+  const { scope_type = 'tenant', scope_id = null, ...rest } = body
   const res = await fetch(`${BASE}/members`, {
     method: 'POST',
     headers: tenantJsonHeaders(token),
     credentials: 'include',
     body: JSON.stringify({
-      ...body,
+      ...rest,
       role_key: 'project_manager',
-      scope_type: 'tenant',
-      scope_id: null,
+      scope_type,
+      scope_id: scope_type === 'tenant' ? null : scope_id,
     }),
   })
   if (!res.ok) throw new Error(await errorMessage(res))
   return res.json()
+}
+
+// Grant an existing member the project_manager role at a scope (e.g. one project).
+export async function addMemberRole(
+  token: string,
+  userId: string,
+  scope: { scope_type: 'tenant' | 'client' | 'project'; scope_id?: string | null }
+): Promise<{ assignment: { id: string; scope_type: string; scope_id: string | null } }> {
+  const res = await fetch(`${BASE}/members/${userId}/roles`, {
+    method: 'POST',
+    headers: tenantJsonHeaders(token),
+    credentials: 'include',
+    body: JSON.stringify({
+      role_key: 'project_manager',
+      scope_type: scope.scope_type,
+      scope_id: scope.scope_type === 'tenant' ? null : scope.scope_id,
+    }),
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function deleteMemberRole(
+  token: string,
+  userId: string,
+  assignmentId: string
+): Promise<void> {
+  const res = await fetch(`${BASE}/members/${userId}/roles/${assignmentId}`, {
+    method: 'DELETE',
+    headers: { authorization: `Bearer ${token}` },
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
 }
 
 export async function listClients(token: string): Promise<{ data: Client[] }> {

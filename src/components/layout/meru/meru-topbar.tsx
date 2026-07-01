@@ -17,12 +17,13 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { MeruBrand } from './meru-brand'
 import { MeruNavSection } from './meru-nav-section'
 import { TopbarThemeButton } from './topbar-theme-button'
-import { workspaceLinks } from './workspace-links'
+import { useWorkspaceLinks } from './workspace-links'
 
 export function MeruTopbar() {
   const navigate = useNavigate()
   const location = useLocation()
   const { auth } = useAuthStore()
+  const workspaceLinks = useWorkspaceLinks()
   const user = auth.user
   const displayName = user?.full_name || user?.email || 'User'
   const initials =

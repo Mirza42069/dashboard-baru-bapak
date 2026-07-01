@@ -24,12 +24,8 @@ membersRouter.post(
           password: z.string().min(8),
           full_name: z.string().min(1),
           role_key: z.enum(ASSIGNABLE),
-          scope_type: z.enum(['tenant', 'client', 'project']).default('tenant'),
-          scope_id: z.string().uuid().nullish(),
-        })
-        .refine((b) => (b.scope_type === 'tenant') === (b.scope_id == null), {
-          message: 'scope_id is required for client/project scope and forbidden for tenant scope',
-          path: ['scope_id'],
+          scope_type: z.enum(['client', 'project']).default('project'),
+          scope_id: z.string().uuid(),
         }),
       req.body,
     )
@@ -54,7 +50,7 @@ membersRouter.post(
           user.rows[0].id,
           role.rows[0].id,
           body.scope_type,
-          body.scope_type === 'tenant' ? null : body.scope_id,
+          body.scope_id,
           req.user!.id,
         ],
       )
@@ -96,12 +92,8 @@ membersRouter.post(
       z
         .object({
           role_key: z.enum(ASSIGNABLE),
-          scope_type: z.enum(['tenant', 'client', 'project']).default('tenant'),
-          scope_id: z.string().uuid().nullish(),
-        })
-        .refine((b) => (b.scope_type === 'tenant') === (b.scope_id == null), {
-          message: 'scope_id is required for client/project scope and forbidden for tenant scope',
-          path: ['scope_id'],
+          scope_type: z.enum(['client', 'project']).default('project'),
+          scope_id: z.string().uuid(),
         }),
       req.body,
     )
@@ -122,7 +114,7 @@ membersRouter.post(
           req.params.userId,
           role.rows[0].id,
           body.scope_type,
-          body.scope_type === 'tenant' ? null : body.scope_id,
+          body.scope_id,
           req.user!.id,
         ],
       )
