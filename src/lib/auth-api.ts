@@ -90,6 +90,7 @@ export type Project = {
   progress: number // overall actual % (0–100), computed from the active baseline
   managers: Pick<TenantMember, 'id' | 'email' | 'full_name'>[]
   open_ticket_count: number // unresolved tickets — >0 flags a problematic project
+  deviation: number | null // latest actual − planned %; <0 = behind schedule, null = no data
 }
 
 export type Me = {

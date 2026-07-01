@@ -58,6 +58,16 @@ const OPEN_TICKETS_EXPR = `(
     AND t.status IN ('open','in_progress')
 )::int AS open_ticket_count`
 
+// Schedule deviation from the latest period summary (actual − planned %).
+// Negative = behind schedule. NULL when no progress/summary exists yet.
+const DEVIATION_EXPR = `(
+  SELECT ps.deviation_pct
+  FROM period_summaries ps
+  JOIN reporting_periods rp ON rp.id = ps.period_id
+  WHERE ps.project_id = p.id
+  ORDER BY rp.end_date DESC LIMIT 1
+)::float8 AS deviation`
+
 // POST /projects — requires an existing client (projects.client_id is NOT NULL).
 projectsRouter.post(
   '/projects',
@@ -128,7 +138,7 @@ projectsRouter.get(
     )
     const r = await withCtx(req.ctx, (qy) =>
       qy(
-        `SELECT ${projColsP}, c.name AS client_name, ${PROGRESS_EXPR}, ${OPEN_TICKETS_EXPR},
+        `SELECT ${projColsP}, c.name AS client_name, ${PROGRESS_EXPR}, ${OPEN_TICKETS_EXPR}, ${DEVIATION_EXPR},
                 COALESCE(json_agg(DISTINCT jsonb_build_object(
                   'id', u.id, 'full_name', u.full_name, 'email', u.email
                 )) FILTER (WHERE u.id IS NOT NULL), '[]') AS managers
@@ -160,7 +170,7 @@ projectsRouter.get(
   asyncHandler(async (req, res) => {
     const r = await withCtx(req.ctx, (q) =>
       q(
-        `SELECT ${projColsP}, p.updated_at, c.name AS client_name, ${PROGRESS_EXPR}, ${OPEN_TICKETS_EXPR},
+        `SELECT ${projColsP}, p.updated_at, c.name AS client_name, ${PROGRESS_EXPR}, ${OPEN_TICKETS_EXPR}, ${DEVIATION_EXPR},
                 COALESCE(json_agg(DISTINCT jsonb_build_object(
                   'id', u.id, 'full_name', u.full_name, 'email', u.email
                 )) FILTER (WHERE u.id IS NOT NULL), '[]') AS managers

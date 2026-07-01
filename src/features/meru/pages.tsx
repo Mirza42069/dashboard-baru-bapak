@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   ChevronDown,
   CircleAlert,
+  PauseCircle,
   Plus,
   Search,
   SlidersHorizontal,
@@ -53,7 +54,6 @@ import {
   Panel,
   StatusPill,
 } from './components'
-import { activity, attentionItems, milestones, portfolioMetrics } from './data'
 
 export function TenantDashboard() {
   const { auth } = useAuthStore()
@@ -89,140 +89,117 @@ export function TenantDashboard() {
     void loadTickets()
   }, [token])
 
-  const activeProjects = rows.filter((project) => project.status === 'active')
-  const pausedProjects = rows.filter((project) => project.status === 'on_hold')
-  const setupProjects = rows.filter((project) => project.status === 'planning')
-  const incompleteProjects = rows.filter(
-    (project) =>
-      !project.managers.length ||
-      !project.contract_start ||
-      !project.contract_finish ||
-      !project.schedule_start
-  )
-  const actionProjects = [...incompleteProjects, ...pausedProjects]
-    .filter(
-      (project, index, arr) =>
-        arr.findIndex((item) => item.id === project.id) === index
-    )
-    .slice(0, 5)
+  // Behind schedule = negative latest deviation, most-behind first.
+  const behind = rows
+    .filter((p) => p.deviation != null && p.deviation < 0)
+    .sort((a, b) => (a.deviation ?? 0) - (b.deviation ?? 0))
+  const onHold = rows.filter((p) => p.status === 'on_hold')
 
   return (
     <>
-      <PageHeader title='Portfolio command centre' />
-      <Panel
-        title='Project command panel'
-        description='Prioritised setup and follow-up actions. Use Projects for the full register.'
-        className='mt-2 shadow-md'
+      <PageHeader
+        title='Portfolio health'
+        description='Projects that need attention, by problem. Use Projects for the full register.'
         action={
           <Button variant='ghost' size='sm' asChild>
             <Link to='/projects'>
-              Details <ArrowUpRight className='size-3' />
+              All projects <ArrowUpRight className='size-3' />
             </Link>
           </Button>
         }
-      >
-        <div className='mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
-          <ProjectSummaryTile
-            label='Total projects'
-            value={String(rows.length)}
-          />
-          <ProjectSummaryTile
-            label='Active now'
-            value={String(activeProjects.length)}
-            tone='good'
-          />
-          <ProjectSummaryTile
-            label='Planning setup'
-            value={String(setupProjects.length)}
-            tone='risk'
-          />
-          <ProjectSummaryTile
-            label='Needs action'
-            value={String(actionProjects.length)}
-            tone='risk'
-          />
+      />
+
+      <div className='grid gap-4'>
+        <Panel title={`Behind schedule${behind.length ? ` · ${behind.length}` : ''}`}>
+          {behind.length ? (
+            <div className='grid gap-2.5 md:grid-cols-2 xl:grid-cols-3'>
+              {behind.map((p) => (
+                <BehindScheduleCard key={p.id} project={p} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState message='Every tracked project is on or ahead of schedule.' />
+          )}
+        </Panel>
+
+        <div className='grid gap-4 xl:grid-cols-2'>
+          <Panel title={`Open tickets${openTickets.length ? ` · ${openTickets.length}` : ''}`}>
+            {openTickets.length ? (
+              <div className='space-y-2'>
+                {openTickets.map((t) => (
+                  <TicketAttentionCard key={t.id} ticket={t} />
+                ))}
+              </div>
+            ) : (
+              <EmptyState message='No open tickets.' />
+            )}
+          </Panel>
+
+          <Panel title={`On hold${onHold.length ? ` · ${onHold.length}` : ''}`}>
+            {onHold.length ? (
+              <div className='space-y-2'>
+                {onHold.map((p) => (
+                  <OnHoldCard key={p.id} project={p} />
+                ))}
+              </div>
+            ) : (
+              <EmptyState message='No projects on hold.' />
+            )}
+          </Panel>
         </div>
-      </Panel>
-      <div className='mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4'>
-        {portfolioMetrics.map((metric) => (
-          <MetricCard key={metric.label} {...metric} />
-        ))}
-      </div>
-      <div className='mt-6 grid gap-4 xl:grid-cols-[1.35fr_0.9fr]'>
-        <Panel title='Needs attention'>
-          {openTickets.length || attentionItems.length ? (
-            <div className='space-y-2'>
-              {openTickets.map((t) => (
-                <TicketAttentionCard key={t.id} ticket={t} />
-              ))}
-              {attentionItems.map((item) => (
-                <AttentionCard key={item.title} {...item} />
-              ))}
-            </div>
-          ) : (
-            <EmptyState message='No attention items.' />
-          )}
-        </Panel>
-      </div>
-      <div className='mt-6 grid gap-4 xl:grid-cols-2'>
-        <Panel title='Recent activity'>
-          {activity.length ? (
-            <div className='divide-y divide-border'>
-              {activity.map((item) => (
-                <ActivityRow key={`${item.actor}-${item.time}`} {...item} />
-              ))}
-            </div>
-          ) : (
-            <EmptyState message='No recent activity.' />
-          )}
-        </Panel>
-        <Panel title='Upcoming milestones'>
-          {milestones.length ? (
-            <div className='space-y-2'>
-              {milestones.map((item) => (
-                <MilestoneRow key={item.name} {...item} />
-              ))}
-            </div>
-          ) : (
-            <EmptyState message='No upcoming milestones.' />
-          )}
-        </Panel>
       </div>
     </>
   )
 }
 
-function ProjectSummaryTile({
-  label,
-  value,
-  hint,
-  tone = 'neutral',
-}: {
-  label: string
-  value: string
-  hint?: string
-  tone?: 'good' | 'risk' | 'neutral'
-}) {
-  const valueColor =
-    tone === 'good'
-      ? 'text-[var(--status-ok-fg)]'
-      : tone === 'risk'
-        ? 'text-[var(--status-risk-fg)]'
-        : 'text-foreground'
+function BehindScheduleCard({ project }: { project: ApiProject }) {
   return (
-    <div className='rounded-md border border-border bg-card p-3'>
-      <div className='text-[10px] font-medium tracking-[0.08em] text-muted-foreground uppercase'>
-        {label}
+    <Link
+      to='/projects/$id'
+      params={{ id: project.id }}
+      className='block rounded-md border border-[var(--status-behind-bd)] bg-[var(--status-behind-bg)] p-3 transition hover:-translate-y-0.5 hover:shadow-md'
+    >
+      <div className='flex items-start justify-between gap-2'>
+        <div className='min-w-0'>
+          <div className='truncate font-medium text-foreground'>
+            {project.name}
+          </div>
+          <div className='font-mono text-[11px] text-muted-foreground'>
+            {project.code || 'No code'} · {project.client.name}
+          </div>
+        </div>
+        <StatusPill tone={statusTone(project.status)}>{project.status}</StatusPill>
       </div>
-      <div
-        className={`mt-1.5 font-mono text-xl font-semibold tracking-tight tabular-nums ${valueColor}`}
-      >
-        {value}
+      <div className='mt-2 flex items-end justify-between'>
+        <span className='font-mono text-lg font-semibold text-[var(--status-behind-fg)]'>
+          {project.deviation!.toFixed(1)}%
+        </span>
+        <span className='text-[11px] text-muted-foreground'>
+          {project.progress.toFixed(1)}% actual
+        </span>
       </div>
-      {hint && (
-        <div className='mt-1 text-[11px] text-muted-foreground'>{hint}</div>
-      )}
-    </div>
+    </Link>
+  )
+}
+
+function OnHoldCard({ project }: { project: ApiProject }) {
+  return (
+    <Link
+      to='/projects/$id'
+      params={{ id: project.id }}
+      className='flex items-center gap-3 rounded-md border border-border bg-card p-3 transition hover:opacity-80'
+    >
+      <PauseCircle className='size-4 flex-none text-muted-foreground' />
+      <div className='min-w-0 flex-1'>
+        <div className='truncate font-medium text-foreground'>{project.name}</div>
+        <div className='font-mono text-[11px] text-muted-foreground'>
+          {project.code || 'No code'} · {project.client.name}
+        </div>
+      </div>
+      <span className='font-mono text-[11px] text-muted-foreground'>
+        {project.progress.toFixed(1)}%
+      </span>
+    </Link>
   )
 }
 
@@ -302,7 +279,16 @@ export function ProjectsPage() {
           label='Average progress'
           value={`${avgProgress(rows).toFixed(1)}%`}
         />
-        <MetricCard label='At risk / delayed' value='0' tone='risk' />
+        <MetricCard
+          label='At risk / delayed'
+          value={String(
+            rows.filter(
+              (p) =>
+                p.status === 'on_hold' || (p.deviation != null && p.deviation < 0)
+            ).length
+          )}
+          tone='risk'
+        />
       </div>
       <Panel
         title='Project register'
@@ -1107,35 +1093,6 @@ function CreateMemberDialog({
   )
 }
 
-function AttentionCard({
-  title,
-  detail,
-  severity,
-}: {
-  title: string
-  detail: string
-  severity: 'Low' | 'Medium' | 'High'
-}) {
-  const high = severity === 'High'
-  return (
-    <div
-      className={`flex gap-3 rounded-md border p-3 ${
-        high
-          ? 'border-[var(--status-behind-bd)] bg-[var(--status-behind-bg)]'
-          : 'border-[var(--status-risk-bd)] bg-[var(--status-risk-bg)]'
-      }`}
-    >
-      <CircleAlert
-        className={`mt-0.5 size-4 ${high ? 'text-[var(--status-behind-fg)]' : 'text-[var(--status-risk-fg)]'}`}
-      />
-      <div className='min-w-0 flex-1'>
-        <div className='font-medium text-foreground'>{title}</div>
-        <div className='text-xs text-muted-foreground'>{detail}</div>
-      </div>
-      <StatusPill tone={high ? 'danger' : 'risk'}>{severity}</StatusPill>
-    </div>
-  )
-}
 // Any open ticket makes its project "problematic" — surface it here with who's
 // responsible and how to reach them (the problem is resolved outside the app).
 function TicketAttentionCard({ ticket }: { ticket: OpenTicket }) {
@@ -1161,57 +1118,6 @@ function TicketAttentionCard({ ticket }: { ticket: OpenTicket }) {
         {ticket.status === 'in_progress' ? 'In progress' : 'Open'}
       </StatusPill>
     </Link>
-  )
-}
-function ActivityRow({
-  actor,
-  action,
-  target,
-  time,
-}: {
-  actor: string
-  action: string
-  target: string
-  time: string
-}) {
-  return (
-    <div className='flex gap-3 py-3'>
-      <span className='mt-2 size-2 rounded-full bg-[var(--lapis-500)]' />
-      <div className='min-w-0 flex-1'>
-        <div>
-          <span className='font-semibold text-foreground'>{actor}</span>{' '}
-          {action}
-        </div>
-        <div className='text-xs text-muted-foreground'>{target}</div>
-      </div>
-      <div className='text-xs text-muted-foreground'>{time}</div>
-    </div>
-  )
-}
-function MilestoneRow({
-  name,
-  date,
-  project,
-  status,
-}: {
-  name: string
-  date: string
-  project: string
-  status: string
-}) {
-  return (
-    <div className='flex items-center gap-3 rounded-md border border-border bg-card p-3'>
-      <div className='grid size-11 place-items-center rounded-sm border border-[var(--lapis-100)] bg-card font-mono text-xs font-semibold tabular-nums text-[var(--lapis-700)] shadow-xs'>
-        {date}
-      </div>
-      <div className='min-w-0 flex-1'>
-        <div className='font-medium text-foreground'>{name}</div>
-        <div className='text-xs text-muted-foreground'>{project}</div>
-      </div>
-      <StatusPill tone={status === 'Ready' ? 'good' : 'risk'}>
-        {status}
-      </StatusPill>
-    </div>
   )
 }
 function statusTone(status: string) {
