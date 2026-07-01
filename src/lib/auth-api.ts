@@ -89,6 +89,7 @@ export type Project = {
   created_at: string
   progress: number // overall actual % (0–100), computed from the active baseline
   managers: Pick<TenantMember, 'id' | 'email' | 'full_name'>[]
+  open_ticket_count: number // unresolved tickets — >0 flags a problematic project
 }
 
 export type Me = {
@@ -680,4 +681,97 @@ export async function listPlatformTenantMembers(
   })
   if (!res.ok) throw new Error(await errorMessage(res))
   return res.json()
+}
+
+// ---- tickets --------------------------------------------------------------
+export type TicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed'
+
+export type Ticket = {
+  id: string
+  project_id: string
+  number: number
+  title: string
+  description: string | null
+  responsible_name: string | null
+  responsible_contact: string | null
+  status: TicketStatus
+  created_by: string | null
+  resolved_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+// The dashboard feed also carries the project name (joined server-side).
+export type OpenTicket = Ticket & { project_name: string }
+
+export type TicketInput = {
+  title: string
+  description?: string | null
+  responsible_name?: string | null
+  responsible_contact?: string | null
+}
+
+export async function listTickets(
+  token: string,
+  projectId: string
+): Promise<{ data: Ticket[] }> {
+  const res = await fetch(`${BASE}/projects/${projectId}/tickets`, {
+    headers: { authorization: `Bearer ${token}` },
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function listOpenTickets(
+  token: string
+): Promise<{ data: OpenTicket[] }> {
+  const res = await fetch(`${BASE}/tickets`, {
+    headers: { authorization: `Bearer ${token}` },
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function createTicket(
+  token: string,
+  projectId: string,
+  body: TicketInput
+): Promise<{ ticket: Ticket }> {
+  const res = await fetch(`${BASE}/projects/${projectId}/tickets`, {
+    method: 'POST',
+    headers: tenantJsonHeaders(token),
+    credentials: 'include',
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function updateTicket(
+  token: string,
+  ticketId: string,
+  patch: Partial<TicketInput> & { status?: TicketStatus }
+): Promise<{ ticket: Ticket }> {
+  const res = await fetch(`${BASE}/tickets/${ticketId}`, {
+    method: 'PATCH',
+    headers: tenantJsonHeaders(token),
+    credentials: 'include',
+    body: JSON.stringify(patch),
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
+  return res.json()
+}
+
+export async function deleteTicket(
+  token: string,
+  ticketId: string
+): Promise<void> {
+  const res = await fetch(`${BASE}/tickets/${ticketId}`, {
+    method: 'DELETE',
+    headers: { authorization: `Bearer ${token}` },
+    credentials: 'include',
+  })
+  if (!res.ok) throw new Error(await errorMessage(res))
 }

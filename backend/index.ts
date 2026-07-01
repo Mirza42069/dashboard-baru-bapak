@@ -11,6 +11,7 @@ import { projectsRouter } from './routes/projects'
 import { boqRouter } from './routes/boq'
 import { scheduleRouter } from './routes/schedule'
 import { progressRouter } from './routes/progress'
+import { ticketsRouter } from './routes/tickets'
 
 const app = express()
 app.use(express.json())
@@ -30,6 +31,7 @@ app.use('/api/v1', projectsRouter)
 app.use('/api/v1', boqRouter)
 app.use('/api/v1', scheduleRouter)
 app.use('/api/v1', progressRouter)
+app.use('/api/v1', ticketsRouter)
 
 app.use(errorHandler)
 

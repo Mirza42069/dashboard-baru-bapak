@@ -17,7 +17,9 @@ import {
   activateBoqVersion,
   createBoqItem,
   createBoqVersion,
+  createTicket,
   deleteBoqItem,
+  deleteTicket,
   generatePeriods,
   getProgressReport,
   getProject,
@@ -25,17 +27,21 @@ import {
   listBoqVersions,
   listDistribution,
   listPeriods,
+  listTickets,
   patchBoqItem,
   recalcBoqWeights,
   saveDistribution,
   savePeriodProgress,
   updateProjectStatus,
+  updateTicket,
   type BoqItem,
   type BoqItemInput,
   type BoqVersion,
   type ProgressEntry,
   type Project as ApiProject,
   type ReportingPeriod,
+  type Ticket,
+  type TicketStatus,
 } from '@/lib/auth-api'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -85,6 +91,7 @@ const tabGroups = [
     { value: 'schedule', label: 'Schedule' },
   ],
   [{ value: 'progress', label: 'Progress' }],
+  [{ value: 'tickets', label: 'Tickets' }],
   [
     { value: 'documents', label: 'Documents' },
     { value: 'team', label: 'Team' },
@@ -299,6 +306,9 @@ export function ProjectDetailPage() {
         </TabsContent>
         <TabsContent value='progress'>
           <ProgressTab projectId={project.id} />
+        </TabsContent>
+        <TabsContent value='tickets'>
+          <TicketsTab projectId={project.id} />
         </TabsContent>
         <TabsContent value='schedule'>
           <ScheduleTab projectId={project.id} />
@@ -2254,6 +2264,300 @@ function ScheduleTab({ projectId }: { projectId: string }) {
         The cumulative row is the planned baseline S-curve, derived live from
         the matrix. It reaches ~100% when every row totals its weight.
       </p>
+    </div>
+  )
+}
+
+const ticketStatuses: {
+  value: TicketStatus
+  label: string
+  tone: 'good' | 'risk' | 'danger' | 'muted'
+}[] = [
+  { value: 'open', label: 'Open', tone: 'danger' },
+  { value: 'in_progress', label: 'In progress', tone: 'risk' },
+  { value: 'resolved', label: 'Resolved', tone: 'good' },
+  { value: 'closed', label: 'Closed', tone: 'muted' },
+]
+const ticketStatusMeta = (s: TicketStatus) =>
+  ticketStatuses.find((t) => t.value === s) ?? ticketStatuses[0]
+
+function TicketsTab({ projectId }: { projectId: string }) {
+  const { auth } = useAuthStore()
+  const token = auth.accessToken
+  const [tickets, setTickets] = useState<Ticket[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [adding, setAdding] = useState(false)
+
+  // loading starts true; no synchronous setState in the mount effect below.
+  const load = useCallback(async () => {
+    if (!token) return
+    try {
+      const { data } = await listTickets(token, projectId)
+      setTickets(data)
+    } catch (err) {
+      toast.error(errMsg(err))
+    } finally {
+      setLoading(false)
+    }
+  }, [token, projectId])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const create = async (input: {
+    title: string
+    description: string
+    responsible_name: string
+    responsible_contact: string
+  }) => {
+    if (!token || busy) return
+    setBusy(true)
+    try {
+      await createTicket(token, projectId, {
+        title: input.title.trim(),
+        description: input.description.trim() || null,
+        responsible_name: input.responsible_name.trim() || null,
+        responsible_contact: input.responsible_contact.trim() || null,
+      })
+      setAdding(false)
+      await load()
+      toast.success('Ticket created.')
+    } catch (err) {
+      toast.error(errMsg(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const changeStatus = async (ticket: Ticket, status: TicketStatus) => {
+    if (!token || busy || status === ticket.status) return
+    setBusy(true)
+    try {
+      const { ticket: updated } = await updateTicket(token, ticket.id, { status })
+      setTickets((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
+    } catch (err) {
+      toast.error(errMsg(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const remove = async (ticket: Ticket) => {
+    if (!token || busy) return
+    setBusy(true)
+    try {
+      await deleteTicket(token, ticket.id)
+      setTickets((prev) => prev.filter((t) => t.id !== ticket.id))
+      toast.success('Ticket deleted.')
+    } catch (err) {
+      toast.error(errMsg(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const openCount = tickets.filter(
+    (t) => t.status === 'open' || t.status === 'in_progress'
+  ).length
+
+  if (loading) return <EmptyState message='Loading tickets…' />
+
+  return (
+    <Panel
+      title='Tickets'
+      description={
+        openCount
+          ? `${openCount} open — this project shows as needing attention on the dashboard.`
+          : 'Flag anything going wrong on this project. Open tickets surface on the dashboard.'
+      }
+      action={
+        !adding && (
+          <Button
+            size='sm'
+            className='rounded-md text-xs'
+            disabled={busy}
+            onClick={() => setAdding(true)}
+          >
+            <Plus className='size-3.5' /> New ticket
+          </Button>
+        )
+      }
+    >
+      {adding && (
+        <TicketComposer busy={busy} onAdd={create} onClose={() => setAdding(false)} />
+      )}
+      {tickets.length ? (
+        <div className='divide-y divide-border'>
+          {tickets.map((t) => (
+            <TicketRow
+              key={t.id}
+              ticket={t}
+              busy={busy}
+              onChangeStatus={(s) => void changeStatus(t, s)}
+              onDelete={() => void remove(t)}
+            />
+          ))}
+        </div>
+      ) : (
+        !adding && <EmptyState message='No tickets. Create one to flag an issue.' />
+      )}
+    </Panel>
+  )
+}
+
+function TicketComposer({
+  busy,
+  onAdd,
+  onClose,
+}: {
+  busy: boolean
+  onAdd: (input: {
+    title: string
+    description: string
+    responsible_name: string
+    responsible_contact: string
+  }) => void
+  onClose: () => void
+}) {
+  const empty = {
+    title: '',
+    description: '',
+    responsible_name: '',
+    responsible_contact: '',
+  }
+  const [f, setF] = useState(empty)
+  const set =
+    (k: keyof typeof empty) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+      setF((p) => ({ ...p, [k]: e.target.value }))
+  const fieldCls =
+    'h-8 w-full rounded-sm border border-input bg-background px-2 text-xs outline-none focus:border-primary'
+
+  return (
+    <div className='mb-4 space-y-2.5 rounded-md border border-border bg-muted/40 p-3'>
+      <input
+        autoFocus
+        value={f.title}
+        onChange={set('title')}
+        placeholder='What is going wrong? (title)'
+        className={fieldCls}
+      />
+      <textarea
+        value={f.description}
+        onChange={set('description')}
+        placeholder='Details (optional)'
+        rows={2}
+        className={cn(fieldCls, 'h-auto resize-y py-1.5')}
+      />
+      <div className='grid gap-2.5 sm:grid-cols-2'>
+        <input
+          value={f.responsible_name}
+          onChange={set('responsible_name')}
+          placeholder='Who is responsible?'
+          className={fieldCls}
+        />
+        <input
+          value={f.responsible_contact}
+          onChange={set('responsible_contact')}
+          placeholder='How to contact them'
+          className={fieldCls}
+        />
+      </div>
+      <div className='flex justify-end gap-2'>
+        <Button
+          size='sm'
+          variant='outline'
+          className='rounded-md text-xs'
+          onClick={onClose}
+        >
+          Cancel
+        </Button>
+        <Button
+          size='sm'
+          className='rounded-md text-xs'
+          disabled={!f.title.trim() || busy}
+          onClick={() => onAdd(f)}
+        >
+          <Plus className='size-3.5' /> Create ticket
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function TicketRow({
+  ticket,
+  busy,
+  onChangeStatus,
+  onDelete,
+}: {
+  ticket: Ticket
+  busy: boolean
+  onChangeStatus: (status: TicketStatus) => void
+  onDelete: () => void
+}) {
+  const meta = ticketStatusMeta(ticket.status)
+  return (
+    <div className='flex flex-wrap items-start gap-3 py-3'>
+      <span className='mt-0.5 font-mono text-[11px] text-muted-foreground'>
+        #{ticket.number}
+      </span>
+      <div className='min-w-0 flex-1'>
+        <div className='text-xs font-medium text-foreground'>{ticket.title}</div>
+        {ticket.description && (
+          <div className='mt-0.5 text-[11px] text-muted-foreground'>
+            {ticket.description}
+          </div>
+        )}
+        <div className='mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-muted-foreground'>
+          {ticket.responsible_name && (
+            <span>
+              Responsible:{' '}
+              <span className='text-foreground'>{ticket.responsible_name}</span>
+            </span>
+          )}
+          {ticket.responsible_contact && <span>{ticket.responsible_contact}</span>}
+          <span>Issued {formatDate(ticket.created_at)}</span>
+        </div>
+      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild disabled={busy}>
+          <button
+            type='button'
+            className='inline-flex items-center rounded-full transition-opacity outline-none hover:opacity-80 focus-visible:ring-2 focus-visible:ring-ring/60 disabled:pointer-events-none disabled:opacity-60'
+          >
+            <StatusPill tone={meta.tone}>
+              {meta.label}
+              <ChevronsUpDown className='ms-1 size-3' />
+            </StatusPill>
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align='end' className='w-36'>
+          {ticketStatuses.map((s) => (
+            <DropdownMenuItem
+              key={s.value}
+              disabled={busy || s.value === ticket.status}
+              onSelect={() => onChangeStatus(s.value)}
+            >
+              {s.label}
+              {s.value === ticket.status && <Check className='ms-auto size-3' />}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {ticket.status === 'closed' && (
+        <button
+          type='button'
+          title='Delete ticket'
+          disabled={busy}
+          onClick={onDelete}
+          className='mt-0.5 text-muted-foreground hover:text-destructive disabled:opacity-50'
+        >
+          <Trash2 className='size-3.5' />
+        </button>
+      )}
     </div>
   )
 }

@@ -51,6 +51,13 @@ const PROGRESS_EXPR = `COALESCE((
   WHERE bv.project_id = p.id AND bv.status = 'active'
 ), 0)::float8 AS progress`
 
+// Unresolved tickets on the project — any > 0 flags it as problematic on the dashboard.
+const OPEN_TICKETS_EXPR = `(
+  SELECT COUNT(*) FROM tickets t
+  WHERE t.project_id = p.id AND t.deleted_at IS NULL
+    AND t.status IN ('open','in_progress')
+)::int AS open_ticket_count`
+
 // POST /projects — requires an existing client (projects.client_id is NOT NULL).
 projectsRouter.post(
   '/projects',
@@ -121,7 +128,7 @@ projectsRouter.get(
     )
     const r = await withCtx(req.ctx, (qy) =>
       qy(
-        `SELECT ${projColsP}, c.name AS client_name, ${PROGRESS_EXPR},
+        `SELECT ${projColsP}, c.name AS client_name, ${PROGRESS_EXPR}, ${OPEN_TICKETS_EXPR},
                 COALESCE(json_agg(DISTINCT jsonb_build_object(
                   'id', u.id, 'full_name', u.full_name, 'email', u.email
                 )) FILTER (WHERE u.id IS NOT NULL), '[]') AS managers
@@ -153,7 +160,7 @@ projectsRouter.get(
   asyncHandler(async (req, res) => {
     const r = await withCtx(req.ctx, (q) =>
       q(
-        `SELECT ${projColsP}, p.updated_at, c.name AS client_name, ${PROGRESS_EXPR},
+        `SELECT ${projColsP}, p.updated_at, c.name AS client_name, ${PROGRESS_EXPR}, ${OPEN_TICKETS_EXPR},
                 COALESCE(json_agg(DISTINCT jsonb_build_object(
                   'id', u.id, 'full_name', u.full_name, 'email', u.email
                 )) FILTER (WHERE u.id IS NOT NULL), '[]') AS managers

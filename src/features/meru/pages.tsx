@@ -17,8 +17,10 @@ import {
   getMe,
   listClients,
   listMembers,
+  listOpenTickets,
   listProjects,
   type Client,
+  type OpenTicket,
   type Project as ApiProject,
   type TenantMember,
 } from '@/lib/auth-api'
@@ -56,6 +58,7 @@ import { activity, attentionItems, milestones, portfolioMetrics } from './data'
 export function TenantDashboard() {
   const { auth } = useAuthStore()
   const [rows, setRows] = useState<ApiProject[]>([])
+  const [openTickets, setOpenTickets] = useState<OpenTicket[]>([])
   const token = auth.accessToken
 
   useEffect(() => {
@@ -71,7 +74,19 @@ export function TenantDashboard() {
       }
     }
 
+    // Ticket feed is best-effort: a project-scoped viewer may not hold tenant-wide
+    // ticket.view, so a 403 here just leaves the attention panel empty.
+    async function loadTickets() {
+      try {
+        const res = await listOpenTickets(token)
+        setOpenTickets(res.data)
+      } catch {
+        setOpenTickets([])
+      }
+    }
+
     void loadProjects()
+    void loadTickets()
   }, [token])
 
   const activeProjects = rows.filter((project) => project.status === 'active')
@@ -135,8 +150,11 @@ export function TenantDashboard() {
       </div>
       <div className='mt-6 grid gap-4 xl:grid-cols-[1.35fr_0.9fr]'>
         <Panel title='Needs attention'>
-          {attentionItems.length ? (
+          {openTickets.length || attentionItems.length ? (
             <div className='space-y-2'>
+              {openTickets.map((t) => (
+                <TicketAttentionCard key={t.id} ticket={t} />
+              ))}
               {attentionItems.map((item) => (
                 <AttentionCard key={item.title} {...item} />
               ))}
@@ -363,9 +381,17 @@ function ProjectCard({ project }: { project: ApiProject }) {
     >
       <div className='flex items-start justify-between gap-2'>
         <div className='font-medium text-foreground'>{project.name}</div>
-        <StatusPill tone={statusTone(project.status)}>
-          {project.status}
-        </StatusPill>
+        <div className='flex items-center gap-1.5'>
+          {project.open_ticket_count > 0 && (
+            <StatusPill tone='danger'>
+              <CircleAlert className='me-1 size-3' />
+              {project.open_ticket_count}
+            </StatusPill>
+          )}
+          <StatusPill tone={statusTone(project.status)}>
+            {project.status}
+          </StatusPill>
+        </div>
       </div>
       <div className='my-1 font-mono text-[11px] text-muted-foreground'>
         {project.code || 'No code'} · {project.client.name}
@@ -1108,6 +1134,33 @@ function AttentionCard({
       </div>
       <StatusPill tone={high ? 'danger' : 'risk'}>{severity}</StatusPill>
     </div>
+  )
+}
+// Any open ticket makes its project "problematic" — surface it here with who's
+// responsible and how to reach them (the problem is resolved outside the app).
+function TicketAttentionCard({ ticket }: { ticket: OpenTicket }) {
+  const contact = [ticket.responsible_name, ticket.responsible_contact]
+    .filter(Boolean)
+    .join(' · ')
+  return (
+    <Link
+      to='/projects/$id'
+      params={{ id: ticket.project_id }}
+      className='flex gap-3 rounded-md border border-[var(--status-behind-bd)] bg-[var(--status-behind-bg)] p-3 transition-opacity hover:opacity-80'
+    >
+      <CircleAlert className='mt-0.5 size-4 text-[var(--status-behind-fg)]' />
+      <div className='min-w-0 flex-1'>
+        <div className='font-medium text-foreground'>
+          {ticket.project_name} — {ticket.title}
+        </div>
+        <div className='text-xs text-muted-foreground'>
+          {contact || 'No responsible party set'}
+        </div>
+      </div>
+      <StatusPill tone={ticket.status === 'in_progress' ? 'risk' : 'danger'}>
+        {ticket.status === 'in_progress' ? 'In progress' : 'Open'}
+      </StatusPill>
+    </Link>
   )
 }
 function ActivityRow({

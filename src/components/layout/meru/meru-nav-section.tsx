@@ -21,7 +21,7 @@ export function MeruNavSection({
             activeOptions={{ exact: item.to === '/' }}
             activeProps={{
               className:
-                'bg-[var(--sidebar-accent)] font-bold text-[var(--sidebar-accent-foreground)] shadow-[inset_3px_0_0_var(--sidebar-accent-foreground)]',
+                'bg-[var(--sidebar-accent)] font-bold text-[var(--sidebar-accent-foreground)]',
             }}
             className='flex items-center gap-3 rounded-md px-3 py-2.5 font-semibold text-sidebar-foreground/70 transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
           >
